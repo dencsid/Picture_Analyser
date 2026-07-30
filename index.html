@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.6 – Sobel éltérkép</title>
+<title>Picture Analyzer Lab V0.7 – Sobel élfolyosó</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -20,14 +20,15 @@ input[type=range],select{width:100%}select{padding:8px 9px;border:1px solid #bbb
 .info,.cell-info{margin-top:18px;border-top:1px solid #ddd;padding-top:12px;font-size:14px;line-height:1.55}.cell-info h2{margin:0 0 8px;font-size:16px}.value{font-variant-numeric:tabular-nums}
 .metric-note{margin-top:7px;color:#555;font-size:12px;line-height:1.35}.edge-controls{margin-top:17px;padding:12px;border:1px solid #e0b1b1;border-radius:8px;background:#fff7f7}.edge-controls[hidden]{display:none}
 .edge-controls h2{font-size:15px;margin:0 0 8px;color:#8d2020}
+.corridor-controls{margin-top:12px;padding-top:12px;border-top:1px solid #e5caca}.corridor-controls[hidden]{display:none}
 button{margin-top:14px;width:100%;border:0;border-radius:8px;padding:10px 12px;background:#555;color:#fff;cursor:pointer;font-weight:bold}button:hover{background:#3d3d3d}button:disabled{opacity:.45;cursor:default}
 @media(max-width:920px){main{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.6 – #13/A Sobel-éltérkép</h1>
-  <p>Pixelszintű élkeresés, állítható érzékenységgel és átlátszósággal.</p>
+  <h1>Picture Analyzer Lab V0.7 – #13/B Élfolyosó</h1>
+  <p>Pixelszintű Sobel-élekből képzett, állítható szélességű valószínűségi élzóna.</p>
 </header>
 <main>
 <section class="panel">
@@ -40,6 +41,9 @@ button{margin-top:14px;width:100%;border:0;border-radius:8px;padding:10px 12px;b
       <option value="original">Eredeti kép</option>
       <option value="edgeOverlay">Eredeti kép + pixelszintű éltérkép</option>
       <option value="edgeOnly">Csak pixelszintű éltérkép</option>
+      <option value="corridorOverlay">Eredeti kép + valószínűségi élfolyosó</option>
+      <option value="corridorOnly">Csak valószínűségi élfolyosó</option>
+      <option value="edgeCorridorOverlay">Eredeti kép + Sobel-élek + élfolyosó</option>
       <option value="mosaic">Átlagolt mozaik</option>
       <option value="rgbSpread">Színszórás-hőtérkép</option>
       <option value="maxColorDistance">Maximális színkülönbség</option>
@@ -61,6 +65,19 @@ button{margin-top:14px;width:100%;border:0;border-radius:8px;padding:10px 12px;b
     <div class="control">
       <label for="edgeOpacity"><span>Élréteg átlátszatlansága</span><span><span id="edgeOpacityValue" class="value">75</span>%</span></label>
       <input id="edgeOpacity" type="range" min="0" max="100" step="1" value="75">
+    </div>
+    <div id="corridorControls" class="corridor-controls" hidden>
+      <h2>Valószínűségi élfolyosó</h2>
+      <div class="control">
+        <label for="corridorHalfWidth"><span>Fél-szélesség</span><span><span id="corridorHalfWidthValue" class="value">16</span> px</span></label>
+        <input id="corridorHalfWidth" type="range" min="1" max="60" step="1" value="16">
+        <div class="metric-note">A teljes folyosó szélessége ennek körülbelül a kétszerese. A középpont-elhelyezési valószínűség az éltől távolodva fokozatosan csökken.</div>
+      </div>
+      <div class="control">
+        <label for="corridorOpacity"><span>Folyosóréteg átlátszatlansága</span><span><span id="corridorOpacityValue" class="value">65</span>%</span></label>
+        <input id="corridorOpacity" type="range" min="0" max="100" step="1" value="65">
+      </div>
+      <div class="row"><input id="splitCorridorSides" type="checkbox" checked><label for="splitCorridorSides">A két oldal eltérő jelölése</label></div>
     </div>
   </div>
 
@@ -132,6 +149,12 @@ const edgeSensitivityInput = $("edgeSensitivity");
 const edgeSensitivityValue = $("edgeSensitivityValue");
 const edgeOpacityInput = $("edgeOpacity");
 const edgeOpacityValue = $("edgeOpacityValue");
+const corridorControls = $("corridorControls");
+const corridorHalfWidthInput = $("corridorHalfWidth");
+const corridorHalfWidthValue = $("corridorHalfWidthValue");
+const corridorOpacityInput = $("corridorOpacity");
+const corridorOpacityValue = $("corridorOpacityValue");
+const splitCorridorSidesInput = $("splitCorridorSides");
 const edgeThresholdBox = $("edgeThreshold");
 const resetViewButton = $("resetView");
 const metricNote = $("metricNote");
@@ -141,6 +164,8 @@ const sourceCanvas = document.createElement("canvas");
 const sourceCtx = sourceCanvas.getContext("2d", {willReadFrequently:true});
 const edgeCanvas = document.createElement("canvas");
 const edgeCtx = edgeCanvas.getContext("2d");
+const corridorCanvas = document.createElement("canvas");
+const corridorCtx = corridorCanvas.getContext("2d");
 
 const statusBox = $("status");
 const fileNameBox = $("fileName");
@@ -161,13 +186,21 @@ let sourceImage = null;
 let sourceImageData = null;
 let luminanceData = null;
 let sobelData = null;
+let sobelGxData = null;
+let sobelGyData = null;
 let edgeRenderFrame = 0;
 let cachedDirections = null;
+let corridorCacheKey = "";
+let corridorDistance = null;
+let corridorNearestEdge = null;
 
 const metricDescriptions = {
   original: "Az eredeti kép változtatás nélkül.",
   edgeOverlay: "A küszöb fölötti pixelszintű Sobel-élek vörös rétegként jelennek meg az eredeti képen.",
   edgeOnly: "A küszöb fölötti pixelszintű Sobel-élek fekete háttéren jelennek meg.",
+  corridorOverlay: "Az eredeti képen az él közelében erős, attól távolodva gyengülő valószínűségi élfolyosó jelenik meg.",
+  corridorOnly: "Csak a valószínűségi élfolyosó jelenik meg fekete háttéren.",
+  edgeCorridorOverlay: "Az eredeti képen együtt látható a Sobel-éltérkép és az abból képzett valószínűségi élfolyosó.",
   mosaic: "Minden cella a benne található pixelek átlagos RGB-színét kapja.",
   rgbSpread: "A három RGB-csatorna szórásának együttes értéke.",
   maxColorDistance: "A cella egymástól legtávolabbi jellegzetes színei közötti RGB-távolság becslése.",
@@ -188,6 +221,8 @@ imageInput.addEventListener("change", async () => {
     sourceCanvas.height = bitmap.height;
     edgeCanvas.width = bitmap.width;
     edgeCanvas.height = bitmap.height;
+    corridorCanvas.width = bitmap.width;
+    corridorCanvas.height = bitmap.height;
     sourceCtx.clearRect(0, 0, bitmap.width, bitmap.height);
     sourceCtx.drawImage(bitmap, 0, 0);
     sourceImageData = sourceCtx.getImageData(0, 0, bitmap.width, bitmap.height);
@@ -204,6 +239,11 @@ imageInput.addEventListener("change", async () => {
     sourceImageData = null;
     luminanceData = null;
     sobelData = null;
+    sobelGxData = null;
+    sobelGyData = null;
+    corridorDistance = null;
+    corridorNearestEdge = null;
+    corridorCacheKey = "";
     setStatus("A képet nem sikerült betölteni.");
   }
 });
@@ -230,6 +270,15 @@ edgeOpacityInput.addEventListener("input", () => {
   edgeOpacityValue.textContent = edgeOpacityInput.value;
   scheduleDraw();
 });
+corridorHalfWidthInput.addEventListener("input", () => {
+  corridorHalfWidthValue.textContent = corridorHalfWidthInput.value;
+  scheduleDraw();
+});
+corridorOpacityInput.addEventListener("input", () => {
+  corridorOpacityValue.textContent = corridorOpacityInput.value;
+  scheduleDraw();
+});
+splitCorridorSidesInput.addEventListener("change", scheduleDraw);
 resetViewButton.addEventListener("click", () => {
   displayModeInput.value = "original";
   gridSizeInput.value = 32;
@@ -241,6 +290,11 @@ resetViewButton.addEventListener("click", () => {
   edgeSensitivityValue.textContent = "60";
   edgeOpacityInput.value = 75;
   edgeOpacityValue.textContent = "75";
+  corridorHalfWidthInput.value = 16;
+  corridorHalfWidthValue.textContent = "16";
+  corridorOpacityInput.value = 65;
+  corridorOpacityValue.textContent = "65";
+  splitCorridorSidesInput.checked = true;
   updateMetricDescription();
   updateEdgeControlsVisibility();
   analyzeAndDraw();
@@ -269,6 +323,11 @@ function prepareDerivedImages() {
     luminanceData[p] = .299 * data[i] + .587 * data[i + 1] + .114 * data[i + 2];
   }
   sobelData = new Float32Array(width * height);
+  sobelGxData = new Float32Array(width * height);
+  sobelGyData = new Float32Array(width * height);
+  corridorDistance = null;
+  corridorNearestEdge = null;
+  corridorCacheKey = "";
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
       const p00 = luminanceData[(y - 1) * width + x - 1];
@@ -281,7 +340,10 @@ function prepareDerivedImages() {
       const p22 = luminanceData[(y + 1) * width + x + 1];
       const gx = -p00 + p02 - 2 * p10 + 2 * p12 - p20 + p22;
       const gy = -p00 - 2 * p01 - p02 + p20 + 2 * p21 + p22;
-      sobelData[y * width + x] = Math.hypot(gx, gy) / 4;
+      const index = y * width + x;
+      sobelGxData[index] = gx / 4;
+      sobelGyData[index] = gy / 4;
+      sobelData[index] = Math.hypot(gx, gy) / 4;
     }
   }
 }
@@ -411,6 +473,21 @@ function draw() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     renderEdgeCanvas(true);
     ctx.drawImage(edgeCanvas, 0, 0);
+  } else if (mode === "corridorOverlay") {
+    ctx.drawImage(sourceImage, 0, 0);
+    renderCorridorCanvas();
+    ctx.drawImage(corridorCanvas, 0, 0);
+  } else if (mode === "corridorOnly") {
+    ctx.fillStyle = "black";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    renderCorridorCanvas();
+    ctx.drawImage(corridorCanvas, 0, 0);
+  } else if (mode === "edgeCorridorOverlay") {
+    ctx.drawImage(sourceImage, 0, 0);
+    renderCorridorCanvas();
+    ctx.drawImage(corridorCanvas, 0, 0);
+    renderEdgeCanvas(false);
+    ctx.drawImage(edgeCanvas, 0, 0);
   } else if (mode === "mosaic") {
     drawMosaic();
   } else {
@@ -447,6 +524,97 @@ function renderEdgeCanvas(monochrome) {
     pixels[i+3] = Math.round(255 * globalOpacity * strength);
   }
   edgeCtx.putImageData(output, 0, 0);
+}
+
+
+function buildCorridorDistanceField() {
+  const width = sourceImageData.width;
+  const height = sourceImageData.height;
+  const threshold = getEdgeThreshold();
+  const key = `${width}x${height}:${threshold.toFixed(6)}`;
+  if (key === corridorCacheKey && corridorDistance && corridorNearestEdge) return;
+
+  const count = width * height;
+  const distance = new Float32Array(count);
+  const nearest = new Int32Array(count);
+  distance.fill(Infinity);
+  nearest.fill(-1);
+
+  for (let i = 0; i < count; i++) {
+    if (sobelData[i] > threshold) {
+      distance[i] = 0;
+      nearest[i] = i;
+    }
+  }
+
+  const diagonal = Math.SQRT2;
+  const relax = (index, neighbor, cost) => {
+    if (neighbor < 0 || nearest[neighbor] < 0) return;
+    const candidate = distance[neighbor] + cost;
+    if (candidate < distance[index]) {
+      distance[index] = candidate;
+      nearest[index] = nearest[neighbor];
+    }
+  };
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const i = y * width + x;
+      if (x > 0) relax(i, i - 1, 1);
+      if (y > 0) relax(i, i - width, 1);
+      if (x > 0 && y > 0) relax(i, i - width - 1, diagonal);
+      if (x + 1 < width && y > 0) relax(i, i - width + 1, diagonal);
+    }
+  }
+  for (let y = height - 1; y >= 0; y--) {
+    for (let x = width - 1; x >= 0; x--) {
+      const i = y * width + x;
+      if (x + 1 < width) relax(i, i + 1, 1);
+      if (y + 1 < height) relax(i, i + width, 1);
+      if (x + 1 < width && y + 1 < height) relax(i, i + width + 1, diagonal);
+      if (x > 0 && y + 1 < height) relax(i, i + width - 1, diagonal);
+    }
+  }
+
+  corridorDistance = distance;
+  corridorNearestEdge = nearest;
+  corridorCacheKey = key;
+}
+
+function renderCorridorCanvas() {
+  buildCorridorDistanceField();
+  const width = sourceImageData.width;
+  const height = sourceImageData.height;
+  const halfWidth = Number(corridorHalfWidthInput.value);
+  const globalOpacity = Number(corridorOpacityInput.value) / 100;
+  const splitSides = splitCorridorSidesInput.checked;
+  const output = corridorCtx.createImageData(width, height);
+  const pixels = output.data;
+
+  for (let p = 0, i = 0; p < corridorDistance.length; p++, i += 4) {
+    const distance = corridorDistance[p];
+    if (!Number.isFinite(distance) || distance > halfWidth) continue;
+    const normalized = Math.max(0, 1 - distance / Math.max(1, halfWidth));
+    const probability = normalized * normalized * (3 - 2 * normalized);
+    let r = 255, g = 210, b = 20;
+
+    if (splitSides) {
+      const seed = corridorNearestEdge[p];
+      if (seed >= 0) {
+        const x = p % width, y = Math.floor(p / width);
+        const sx = seed % width, sy = Math.floor(seed / width);
+        const side = (x - sx) * sobelGxData[seed] + (y - sy) * sobelGyData[seed];
+        if (side >= 0) { r = 40; g = 140; b = 255; }
+        else { r = 255; g = 80; b = 150; }
+      }
+    }
+
+    pixels[i] = r;
+    pixels[i + 1] = g;
+    pixels[i + 2] = b;
+    pixels[i + 3] = Math.round(255 * globalOpacity * probability);
+  }
+  corridorCtx.putImageData(output, 0, 0);
 }
 
 function drawMosaic() {
@@ -530,12 +698,15 @@ function updateMetricMaximum() {
 }
 function updateEdgeThreshold() {
   const mode = displayModeInput.value;
-  edgeThresholdBox.textContent = mode === "edgeOverlay" || mode === "edgeOnly" ? getEdgeThreshold().toFixed(2) : "—";
+  edgeThresholdBox.textContent = ["edgeOverlay","edgeOnly","corridorOverlay","corridorOnly","edgeCorridorOverlay"].includes(mode) ? getEdgeThreshold().toFixed(2) : "—";
 }
 function updateMetricDescription() {metricNote.textContent = metricDescriptions[displayModeInput.value] || "";}
 function updateEdgeControlsVisibility() {
   const mode = displayModeInput.value;
-  edgeControls.hidden = mode !== "edgeOverlay" && mode !== "edgeOnly";
+  const edgeModes = ["edgeOverlay","edgeOnly","corridorOverlay","corridorOnly","edgeCorridorOverlay"];
+  const corridorModes = ["corridorOverlay","corridorOnly","edgeCorridorOverlay"];
+  edgeControls.hidden = !edgeModes.includes(mode);
+  corridorControls.hidden = !corridorModes.includes(mode);
 }
 function setStatus(text) {statusBox.textContent = text;}
 

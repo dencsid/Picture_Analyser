@@ -3,31 +3,29 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.4</title>
+<title>Picture Analyzer Lab V0.6 – Analysis Matrix</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:white;padding:16px 20px}
 header h1{margin:0 0 4px;font-size:23px}header p{margin:0;color:#d7d7d7;font-size:14px}
-main{display:grid;grid-template-columns:370px minmax(0,1fr);gap:16px;padding:16px;min-height:calc(100vh - 82px)}
+main{display:grid;grid-template-columns:390px minmax(0,1fr);gap:16px;padding:16px;min-height:calc(100vh - 82px)}
 .panel,.viewer{background:white;border:1px solid #ccc;border-radius:10px;box-shadow:0 2px 9px rgba(0,0,0,.08)}
 .panel{padding:16px;align-self:start}.viewer{min-width:0;overflow:auto;padding:18px;display:flex;align-items:flex-start;justify-content:center;background:linear-gradient(45deg,#ddd 25%,transparent 25%),linear-gradient(-45deg,#ddd 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ddd 75%),linear-gradient(-45deg,transparent 75%,#ddd 75%);background-size:22px 22px;background-position:0 0,0 11px,11px -11px,-11px 0}
 .canvas-wrap{position:relative;display:inline-block;box-shadow:0 3px 16px rgba(0,0,0,.28);background:white}
 canvas{display:block;max-width:100%;height:auto;cursor:crosshair}
-.file-label{display:block;background:#2f70bd;color:white;padding:11px 14px;border-radius:8px;text-align:center;font-weight:bold;cursor:pointer}
-.file-label:hover{background:#265b98}input[type=file]{display:none}.control{margin-top:17px}
-.control label{display:flex;justify-content:space-between;gap:12px;margin-bottom:7px;font-weight:bold}
+.file-label{display:block;background:#2f70bd;color:white;padding:11px 14px;border-radius:8px;text-align:center;font-weight:bold;cursor:pointer}.file-label:hover{background:#265b98}
+input[type=file]{display:none}.control{margin-top:17px}.control label{display:flex;justify-content:space-between;gap:12px;margin-bottom:7px;font-weight:bold}
 input[type=range],select{width:100%}select{padding:8px 9px;border:1px solid #bbb;border-radius:7px;background:white}
 .row{display:flex;align-items:center;gap:9px;margin-top:14px}.status{margin-top:14px;padding:10px;min-height:42px;background:#f3f3f3;border:1px solid #ddd;border-radius:7px;font-size:14px;line-height:1.4}
-.info,.cell-info{margin-top:18px;border-top:1px solid #ddd;padding-top:12px;font-size:14px;line-height:1.55}
-.cell-info h2{margin:0 0 8px;font-size:16px}.value{font-variant-numeric:tabular-nums}
-.swatch{display:inline-block;width:28px;height:18px;border:1px solid #777;vertical-align:middle;margin-left:6px}
-.metric-note{margin-top:7px;color:#555;font-size:12px;line-height:1.35}
-button{margin-top:14px;width:100%;border:0;border-radius:8px;padding:10px 12px;background:#555;color:white;cursor:pointer;font-weight:bold}
-button:hover{background:#3d3d3d}button:disabled{opacity:.45;cursor:default}@media(max-width:920px){main{grid-template-columns:1fr}}
+.info,.cell-info,.matrix-info{margin-top:18px;border-top:1px solid #ddd;padding-top:12px;font-size:14px;line-height:1.55}
+.cell-info h2,.matrix-info h2{margin:0 0 8px;font-size:16px}.value{font-variant-numeric:tabular-nums}.swatch{display:inline-block;width:28px;height:18px;border:1px solid #777;vertical-align:middle;margin-left:6px}
+.metric-note{margin-top:7px;color:#555;font-size:12px;line-height:1.35}.matrix-ok{color:#18702c;font-weight:bold}.matrix-empty{color:#777}
+button{margin-top:14px;width:100%;border:0;border-radius:8px;padding:10px 12px;background:#555;color:white;cursor:pointer;font-weight:bold}button:hover{background:#3d3d3d}button:disabled{opacity:.45;cursor:default}
+@media(max-width:920px){main{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<header><h1>Picture Analyzer Lab V0.5 – Object Architecture</h1><p>Színszórás, maximális színkülönbség, fényerőszórás, Sobel-élmérés és entrópia.</p></header>
+<header><h1>Picture Analyzer Lab V0.6 – Analysis Matrix</h1><p>Fejlesztés #12/A: kétdimenziós elemzési mátrix nyers mérési adatokkal és mátrixalapú hőtérképekkel.</p></header>
 <main>
 <section class="panel">
 <label class="file-label" for="imageInput">Kép betöltése</label><input id="imageInput" type="file" accept="image/*">
@@ -51,34 +49,47 @@ button:hover{background:#3d3d3d}button:disabled{opacity:.45;cursor:default}@medi
 <div><strong>Oszlopok:</strong> <span id="columnCount">—</span></div><div><strong>Sorok:</strong> <span id="rowCount">—</span></div>
 <div><strong>Cellák száma:</strong> <span id="cellCount">—</span></div><div><strong>Aktuális mérőszám maximuma:</strong> <span id="metricMaximum">—</span></div>
 </div>
+<div class="matrix-info"><h2>Elemzési mátrix</h2>
+<div><strong>Méret:</strong> <span id="matrixSize">—</span></div>
+<div><strong>Állapot:</strong> <span id="matrixStatus" class="matrix-empty">Nincs létrehozva.</span></div>
+</div>
 <div class="cell-info"><h2>Kurzor alatti cella</h2>
-<div><strong>Oszlop, sor:</strong> <span id="cellPosition">—</span></div><div><strong>Terület:</strong> <span id="cellBounds">—</span></div>
+<div><strong>Sor:</strong> <span id="cellRow">—</span></div>
+<div><strong>Oszlop:</strong> <span id="cellColumn">—</span></div>
 <div><strong>Átlagos RGB:</strong> <span id="cellAverage">—</span><span id="cellSwatch" class="swatch"></span></div>
 <div><strong>R-szórás:</strong> <span id="cellStdR">—</span></div><div><strong>G-szórás:</strong> <span id="cellStdG">—</span></div>
 <div><strong>B-szórás:</strong> <span id="cellStdB">—</span></div><div><strong>Kombinált RGB-szórás:</strong> <span id="cellCombined">—</span></div>
 <div><strong>Max. színkülönbség:</strong> <span id="cellMaxColorDistance">—</span></div><div><strong>Fényerőszórás:</strong> <span id="cellLuminanceSpread">—</span></div>
-<div><strong>Sobel-él-erősség:</strong> <span id="cellSobel">—</span></div><div><strong>Entrópia:</strong> <span id="cellEntropy">—</span></div>
-<div><strong>Pixelek száma:</strong> <span id="cellPixels">—</span></div></div>
+<div><strong>Sobel-él-erősség:</strong> <span id="cellSobel">—</span></div><div><strong>Entrópia:</strong> <span id="cellEntropy">—</span></div></div>
 </section>
 <section class="viewer"><div class="canvas-wrap"><canvas id="canvas" width="1" height="1"></canvas></div></section>
 </main>
-<!--
-Picture Analyzer Lab V0.5
-- Analysis osztály előkészítve
-- Cell osztály előkészítve
-- Debug mód előkészítve
--->
 <script>
 "use strict";
+
+const METRIC_KEYS=["rgbSpread","maxColorDistance","luminanceSpread","sobel","entropy"];
+
 class Cell{
- constructor(data={}){Object.assign(this,data);this.priority=null;this.reconstructionError=null;this.coverage=null;this.suggestedCircle=null;this.expectedGain=null;this.chainCost=null;}
- updateAnalysis(){} calculateAverageColor(){} calculateRGBSpread(){} calculateSobel(){} calculateEntropy(){}
+ constructor(data={}){
+  Object.assign(this,data);
+ }
 }
+
 class Analysis{
- constructor(){this.cells=[];this.rows=0;this.columns=0;this.maxima={};}
- updateAllCells(){} getCell(r,c){return this.cells[r*this.columns+c];}
- getCellAt(x,y,g){return this.getCell(Math.floor(y/g),Math.floor(x/g));}
+ constructor(){this.matrix=[];this.rows=0;this.columns=0;this.maxima={};}
+ clear(){this.matrix=[];this.rows=0;this.columns=0;this.maxima={};}
+ setGrid(matrix,maxima){
+  this.matrix=matrix;
+  this.rows=matrix.length;
+  this.columns=matrix[0]?.length??0;
+  this.maxima={...maxima};
+ }
+ getCell(row,col){return this.matrix[row]?.[col]??null;}
+ getCellAt(x,y,gridSize){return this.getCell(Math.floor(y/gridSize),Math.floor(x/gridSize));}
+ get cellCount(){return this.rows*this.columns;}
+ isRectangular(){return this.matrix.length===this.rows&&this.matrix.every(row=>row.length===this.columns);}
 }
+
 const analysis=new Analysis();
 const $=id=>document.getElementById(id);
 const imageInput=$("imageInput"),displayModeInput=$("displayMode"),gridSizeInput=$("gridSize"),gridSizeValue=$("gridSizeValue"),
@@ -86,76 +97,184 @@ showGridInput=$("showGrid"),gridOpacityInput=$("gridOpacity"),gridOpacityValue=$
 metricNote=$("metricNote"),canvas=$("canvas"),ctx=canvas.getContext("2d",{willReadFrequently:true});
 const sourceCanvas=document.createElement("canvas"),sourceCtx=sourceCanvas.getContext("2d",{willReadFrequently:true});
 const statusBox=$("status"),fileNameBox=$("fileName"),imageSizeBox=$("imageSize"),columnCountBox=$("columnCount"),rowCountBox=$("rowCount"),
-cellCountBox=$("cellCount"),metricMaximumBox=$("metricMaximum"),cellPositionBox=$("cellPosition"),cellBoundsBox=$("cellBounds"),
-cellAverageBox=$("cellAverage"),cellSwatch=$("cellSwatch"),cellStdRBox=$("cellStdR"),cellStdGBox=$("cellStdG"),cellStdBBox=$("cellStdB"),
-cellCombinedBox=$("cellCombined"),cellMaxColorDistanceBox=$("cellMaxColorDistance"),cellLuminanceSpreadBox=$("cellLuminanceSpread"),
-cellSobelBox=$("cellSobel"),cellEntropyBox=$("cellEntropy"),cellPixelsBox=$("cellPixels");
-let sourceImage=null,sourceImageData=null,luminanceData=null,sobelData=null,cells=[],columns=0,rows=0,maxima={};
+cellCountBox=$("cellCount"),metricMaximumBox=$("metricMaximum"),matrixSizeBox=$("matrixSize"),matrixStatusBox=$("matrixStatus"),
+cellRowBox=$("cellRow"),cellColumnBox=$("cellColumn"),cellAverageBox=$("cellAverage"),cellSwatch=$("cellSwatch"),
+cellStdRBox=$("cellStdR"),cellStdGBox=$("cellStdG"),cellStdBBox=$("cellStdB"),cellCombinedBox=$("cellCombined"),
+cellMaxColorDistanceBox=$("cellMaxColorDistance"),cellLuminanceSpreadBox=$("cellLuminanceSpread"),cellSobelBox=$("cellSobel"),
+cellEntropyBox=$("cellEntropy");
+
+let sourceImage=null,sourceImageData=null,luminanceData=null,sobelData=null;
 const metricDescriptions={
-original:"Az eredeti kép változtatás nélkül.",mosaic:"Minden cella a benne található pixelek átlagos RGB-színét kapja.",
-rgbSpread:"√(σR² + σG² + σB²): a három RGB-csatorna szórásának együttes értéke.",
-maxColorDistance:"A cella egymástól legtávolabbi jellegzetes színei közötti RGB-távolság becslése.",
-luminanceSpread:"A L = 0,299R + 0,587G + 0,114B fényerőérték cellán belüli szórása.",
-sobel:"A fényerőképen számított Sobel-gradiens átlagos nagysága a cellában.",
-entropy:"A fényerő 256 rekeszes Shannon-entrópiája, bitben mérve.",originalGrid:"Az eredeti kép a beállított négyzetráccsal."};
-imageInput.addEventListener("change",async()=>{const file=imageInput.files&&imageInput.files[0];if(!file)return;setStatus("Kép betöltése…");
-try{const bitmap=await createImageBitmap(file);sourceImage=bitmap;sourceCanvas.width=bitmap.width;sourceCanvas.height=bitmap.height;
-sourceCtx.clearRect(0,0,bitmap.width,bitmap.height);sourceCtx.drawImage(bitmap,0,0);sourceImageData=sourceCtx.getImageData(0,0,bitmap.width,bitmap.height);
-canvas.width=bitmap.width;canvas.height=bitmap.height;fileNameBox.textContent=file.name;imageSizeBox.textContent=`${bitmap.width} × ${bitmap.height} px`;
-resetViewButton.disabled=false;prepareDerivedImages();analyzeAndDraw()}catch(error){console.error(error);sourceImage=null;sourceImageData=null;luminanceData=null;sobelData=null;setStatus("A képet nem sikerült betölteni.")}});
-displayModeInput.addEventListener("change",()=>{updateMetricDescription();draw()});
-gridSizeInput.addEventListener("input",()=>{gridSizeValue.textContent=gridSizeInput.value;analyzeAndDraw()});
-showGridInput.addEventListener("change",draw);gridOpacityInput.addEventListener("input",()=>{gridOpacityValue.textContent=gridOpacityInput.value;draw()});
-resetViewButton.addEventListener("click",()=>{displayModeInput.value="original";gridSizeInput.value=32;gridSizeValue.textContent="32";showGridInput.checked=true;gridOpacityInput.value=55;gridOpacityValue.textContent="55";updateMetricDescription();analyzeAndDraw()});
-canvas.addEventListener("mousemove",event=>{if(!sourceImage||cells.length===0)return;const rect=canvas.getBoundingClientRect(),scaleX=canvas.width/rect.width,scaleY=canvas.height/rect.height;
-const x=Math.floor((event.clientX-rect.left)*scaleX),y=Math.floor((event.clientY-rect.top)*scaleY);if(x<0||y<0||x>=canvas.width||y>=canvas.height){clearCellInfo();return}
-const gridSize=Number(gridSizeInput.value),col=Math.floor(x/gridSize),row=Math.floor(y/gridSize),cell=cells[row*columns+col];if(cell)showCellInfo(cell)});
+ original:"Az eredeti kép változtatás nélkül.",mosaic:"Minden cella a benne található pixelek átlagos RGB-színét kapja.",
+ rgbSpread:"√(σR² + σG² + σB²): a három RGB-csatorna szórásának együttes értéke.",
+ maxColorDistance:"A cella egymástól legtávolabbi jellegzetes színei közötti RGB-távolság becslése.",
+ luminanceSpread:"A L = 0,299R + 0,587G + 0,114B fényerőérték cellán belüli szórása.",
+ sobel:"A fényerőképen számított Sobel-gradiens átlagos nagysága a cellában.",
+ entropy:"A fényerő 256 rekeszes Shannon-entrópiája, bitben mérve.",originalGrid:"Az eredeti kép a beállított négyzetráccsal."
+};
+
+imageInput.addEventListener("change",async()=>{
+ const file=imageInput.files&&imageInput.files[0];if(!file)return;setStatus("Kép betöltése…");
+ try{
+  const bitmap=await createImageBitmap(file);sourceImage=bitmap;sourceCanvas.width=bitmap.width;sourceCanvas.height=bitmap.height;
+  sourceCtx.clearRect(0,0,bitmap.width,bitmap.height);sourceCtx.drawImage(bitmap,0,0);sourceImageData=sourceCtx.getImageData(0,0,bitmap.width,bitmap.height);
+  canvas.width=bitmap.width;canvas.height=bitmap.height;fileNameBox.textContent=file.name;imageSizeBox.textContent=`${bitmap.width} × ${bitmap.height} px`;
+  resetViewButton.disabled=false;prepareDerivedImages();analyzeAndDraw();
+ }catch(error){console.error(error);sourceImage=null;sourceImageData=null;luminanceData=null;sobelData=null;analysis.clear();updateMatrixInfo();setStatus("A képet nem sikerült betölteni.");}
+});
+displayModeInput.addEventListener("change",()=>{updateMetricDescription();draw();clearCellInfo();});
+gridSizeInput.addEventListener("input",()=>{gridSizeValue.textContent=gridSizeInput.value;analyzeAndDraw();});
+showGridInput.addEventListener("change",draw);
+gridOpacityInput.addEventListener("input",()=>{gridOpacityValue.textContent=gridOpacityInput.value;draw();});
+resetViewButton.addEventListener("click",()=>{displayModeInput.value="original";gridSizeInput.value=32;gridSizeValue.textContent="32";showGridInput.checked=true;gridOpacityInput.value=55;gridOpacityValue.textContent="55";updateMetricDescription();analyzeAndDraw();});
+canvas.addEventListener("mousemove",event=>{
+ if(!sourceImage||analysis.cellCount===0)return;
+ const rect=canvas.getBoundingClientRect(),scaleX=canvas.width/rect.width,scaleY=canvas.height/rect.height;
+ const x=Math.floor((event.clientX-rect.left)*scaleX),y=Math.floor((event.clientY-rect.top)*scaleY);
+ if(x<0||y<0||x>=canvas.width||y>=canvas.height){clearCellInfo();return;}
+ const gridSize=Number(gridSizeInput.value),row=Math.floor(y/gridSize),col=Math.floor(x/gridSize);
+ const cell=analysis.getCell(row,col);if(cell)showCellInfo(cell,row,col);
+});
 canvas.addEventListener("mouseleave",clearCellInfo);
-function prepareDerivedImages(){const data=sourceImageData.data,width=sourceImageData.width,height=sourceImageData.height;luminanceData=new Float32Array(width*height);
-for(let i=0,p=0;i<data.length;i+=4,p++)luminanceData[p]=.299*data[i]+.587*data[i+1]+.114*data[i+2];
-sobelData=new Float32Array(width*height);for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){const p00=luminanceData[(y-1)*width+x-1],p01=luminanceData[(y-1)*width+x],p02=luminanceData[(y-1)*width+x+1],
-p10=luminanceData[y*width+x-1],p12=luminanceData[y*width+x+1],p20=luminanceData[(y+1)*width+x-1],p21=luminanceData[(y+1)*width+x],p22=luminanceData[(y+1)*width+x+1];
-const gx=-p00+p02-2*p10+2*p12-p20+p22,gy=-p00-2*p01-p02+p20+2*p21+p22;sobelData[y*width+x]=Math.hypot(gx,gy)/4}}
-function analyzeAndDraw(){if(!sourceImageData){ctx.clearRect(0,0,canvas.width,canvas.height);cells=[];updateGridStatistics(0,0,0);clearCellInfo();return}
-setStatus("Cellák elemzése…");setTimeout(()=>{const gridSize=Number(gridSizeInput.value);columns=Math.ceil(sourceCanvas.width/gridSize);rows=Math.ceil(sourceCanvas.height/gridSize);cells=[];
-maxima={rgbSpread:0,maxColorDistance:0,luminanceSpread:0,sobel:0,entropy:0};for(let row=0;row<rows;row++)for(let col=0;col<columns;col++){const x=col*gridSize,y=row*gridSize,width=Math.min(gridSize,sourceCanvas.width-x),height=Math.min(gridSize,sourceCanvas.height-y);
-const cell=calculateCellStatistics(x,y,width,height,col,row);cells.push(cell);for(const key of Object.keys(maxima))if(cell[key]>maxima[key])maxima[key]=cell[key]}
-updateGridStatistics(columns,rows,cells.length);draw();setStatus("Az elemzés elkészült.")},0)}
-let cachedDirections=null;function getColorDirections(){if(cachedDirections)return cachedDirections;const dirs=[];for(let r=-1;r<=1;r++)for(let g=-1;g<=1;g++)for(let b=-1;b<=1;b++){if(r===0&&g===0&&b===0)continue;const len=Math.hypot(r,g,b);dirs.push([r/len,g/len,b/len])}cachedDirections=dirs;return dirs}
-function calculateCellStatistics(x,y,width,height,col,row){const data=sourceImageData.data,imageWidth=sourceImageData.width,pixelCount=width*height;let sumR=0,sumG=0,sumB=0,sumSqR=0,sumSqG=0,sumSqB=0,sumL=0,sumSqL=0,sumSobel=0;
-const histogram=new Uint32Array(256),directions=getColorDirections(),mins=directions.map(()=>({value:Infinity,r:0,g:0,b:0})),maxs=directions.map(()=>({value:-Infinity,r:0,g:0,b:0}));
-for(let py=y;py<y+height;py++){let index=(py*imageWidth+x)*4,lumIndex=py*imageWidth+x;for(let px=x;px<x+width;px++){const r=data[index],g=data[index+1],b=data[index+2],L=luminanceData[lumIndex];
-sumR+=r;sumG+=g;sumB+=b;sumSqR+=r*r;sumSqG+=g*g;sumSqB+=b*b;sumL+=L;sumSqL+=L*L;sumSobel+=sobelData[lumIndex];histogram[Math.max(0,Math.min(255,Math.round(L)))]++;
-for(let d=0;d<directions.length;d++){const dir=directions[d],projection=dir[0]*r+dir[1]*g+dir[2]*b;if(projection<mins[d].value)mins[d]={value:projection,r,g,b};if(projection>maxs[d].value)maxs[d]={value:projection,r,g,b}}
-index+=4;lumIndex++}}
-const avgR=sumR/pixelCount,avgG=sumG/pixelCount,avgB=sumB/pixelCount,avgL=sumL/pixelCount,stdR=Math.sqrt(Math.max(0,sumSqR/pixelCount-avgR*avgR)),
-stdG=Math.sqrt(Math.max(0,sumSqG/pixelCount-avgG*avgG)),stdB=Math.sqrt(Math.max(0,sumSqB/pixelCount-avgB*avgB)),rgbSpread=Math.hypot(stdR,stdG,stdB),
-luminanceSpread=Math.sqrt(Math.max(0,sumSqL/pixelCount-avgL*avgL)),sobel=sumSobel/pixelCount;let entropy=0;
-for(let i=0;i<256;i++){if(histogram[i]===0)continue;const p=histogram[i]/pixelCount;entropy-=p*Math.log2(p)}
-const candidates=[],seen=new Set();for(let d=0;d<directions.length;d++)for(const c of [mins[d],maxs[d]]){const key=`${c.r},${c.g},${c.b}`;if(!seen.has(key)){seen.add(key);candidates.push(c)}}
-let maxColorDistance=0;for(let i=0;i<candidates.length;i++)for(let j=i+1;j<candidates.length;j++){const a=candidates[i],b=candidates[j],distance=Math.hypot(a.r-b.r,a.g-b.g,a.b-b.b);if(distance>maxColorDistance)maxColorDistance=distance}
-return{x,y,width,height,col,row,pixelCount,avgR,avgG,avgB,stdR,stdG,stdB,rgbSpread,maxColorDistance,luminanceSpread,sobel,entropy}}
-function draw(){if(!sourceImage){ctx.clearRect(0,0,canvas.width,canvas.height);return}const mode=displayModeInput.value;ctx.clearRect(0,0,canvas.width,canvas.height);
-if(mode==="original"||mode==="originalGrid")ctx.drawImage(sourceImage,0,0);else if(mode==="mosaic")drawMosaic();else drawMetricHeatmap(mode);
-if(showGridInput.checked||mode==="originalGrid")drawGrid(Number(gridSizeInput.value));updateMetricMaximum()}
-function drawMosaic(){for(const cell of cells){ctx.fillStyle=`rgb(${Math.round(cell.avgR)},${Math.round(cell.avgG)},${Math.round(cell.avgB)})`;ctx.fillRect(cell.x,cell.y,cell.width,cell.height)}}
-function drawMetricHeatmap(metric){const maximum=maxima[metric]||0;for(const cell of cells){const normalized=maximum>0?cell[metric]/maximum:0;ctx.fillStyle=heatColor(normalized);ctx.fillRect(cell.x,cell.y,cell.width,cell.height)}}
-function heatColor(t){t=Math.max(0,Math.min(1,t));const stops=[[0,[0,40,140]],[.25,[0,180,220]],[.5,[30,190,70]],[.75,[250,220,40]],[1,[220,30,20]]];
-for(let i=0;i<stops.length-1;i++){const[t0,c0]=stops[i],[t1,c1]=stops[i+1];if(t>=t0&&t<=t1){const u=(t-t0)/(t1-t0),r=Math.round(c0[0]+(c1[0]-c0[0])*u),g=Math.round(c0[1]+(c1[1]-c0[1])*u),b=Math.round(c0[2]+(c1[2]-c0[2])*u);return`rgb(${r},${g},${b})`}}return"rgb(220,30,20)"}
-function drawGrid(gridSize){const opacity=Number(gridOpacityInput.value)/100;ctx.save();ctx.lineWidth=1;ctx.beginPath();ctx.strokeStyle=`rgba(255,255,255,${opacity})`;
-for(let x=0;x<=canvas.width;x+=gridSize){const px=Math.min(x,canvas.width)+.5;ctx.moveTo(px,0);ctx.lineTo(px,canvas.height)}
-for(let y=0;y<=canvas.height;y+=gridSize){const py=Math.min(y,canvas.height)+.5;ctx.moveTo(0,py);ctx.lineTo(canvas.width,py)}ctx.stroke();ctx.beginPath();ctx.strokeStyle=`rgba(0,0,0,${opacity*.45})`;
-for(let x=0;x<=canvas.width;x+=gridSize){const px=Math.min(x,canvas.width)-.5;ctx.moveTo(px,0);ctx.lineTo(px,canvas.height)}
-for(let y=0;y<=canvas.height;y+=gridSize){const py=Math.min(y,canvas.height)-.5;ctx.moveTo(0,py);ctx.lineTo(canvas.width,py)}ctx.stroke();ctx.restore()}
-function showCellInfo(cell){cellPositionBox.textContent=`${cell.col+1}, ${cell.row+1}`;cellBoundsBox.textContent=`x=${cell.x}…${cell.x+cell.width-1}, y=${cell.y}…${cell.y+cell.height-1}`;
-const r=Math.round(cell.avgR),g=Math.round(cell.avgG),b=Math.round(cell.avgB);cellAverageBox.textContent=`${r}, ${g}, ${b}`;cellSwatch.style.backgroundColor=`rgb(${r},${g},${b})`;
-cellStdRBox.textContent=cell.stdR.toFixed(2);cellStdGBox.textContent=cell.stdG.toFixed(2);cellStdBBox.textContent=cell.stdB.toFixed(2);cellCombinedBox.textContent=cell.rgbSpread.toFixed(2);
-cellMaxColorDistanceBox.textContent=cell.maxColorDistance.toFixed(2);cellLuminanceSpreadBox.textContent=cell.luminanceSpread.toFixed(2);cellSobelBox.textContent=cell.sobel.toFixed(2);
-cellEntropyBox.textContent=`${cell.entropy.toFixed(3)} bit`;cellPixelsBox.textContent=cell.pixelCount.toLocaleString()}
-function clearCellInfo(){for(const el of[cellPositionBox,cellBoundsBox,cellAverageBox,cellStdRBox,cellStdGBox,cellStdBBox,cellCombinedBox,cellMaxColorDistanceBox,cellLuminanceSpreadBox,cellSobelBox,cellEntropyBox,cellPixelsBox])el.textContent="—";cellSwatch.style.backgroundColor="transparent"}
-function updateGridStatistics(columnCount,rowCount,cellCount){columnCountBox.textContent=columnCount?columnCount.toLocaleString():"—";rowCountBox.textContent=rowCount?rowCount.toLocaleString():"—";cellCountBox.textContent=cellCount?cellCount.toLocaleString():"—";if(!cellCount)metricMaximumBox.textContent="—"}
-function updateMetricMaximum(){const mode=displayModeInput.value;if(mode in maxima)metricMaximumBox.textContent=`${maxima[mode].toFixed(3)}${mode==="entropy"?" bit":""}`;else metricMaximumBox.textContent="—"}
-function updateMetricDescription(){metricNote.textContent=metricDescriptions[displayModeInput.value]||""}function setStatus(text){statusBox.textContent=text}updateMetricDescription();
+
+function prepareDerivedImages(){
+ const data=sourceImageData.data,width=sourceImageData.width,height=sourceImageData.height;luminanceData=new Float32Array(width*height);
+ for(let i=0,p=0;i<data.length;i+=4,p++)luminanceData[p]=.299*data[i]+.587*data[i+1]+.114*data[i+2];
+ sobelData=new Float32Array(width*height);
+ for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){
+  const p00=luminanceData[(y-1)*width+x-1],p01=luminanceData[(y-1)*width+x],p02=luminanceData[(y-1)*width+x+1],
+  p10=luminanceData[y*width+x-1],p12=luminanceData[y*width+x+1],p20=luminanceData[(y+1)*width+x-1],p21=luminanceData[(y+1)*width+x],p22=luminanceData[(y+1)*width+x+1];
+  const gx=-p00+p02-2*p10+2*p12-p20+p22,gy=-p00-2*p01-p02+p20+2*p21+p22;sobelData[y*width+x]=Math.hypot(gx,gy)/4;
+ }
+}
+
+function analyzeAndDraw(){
+ if(!sourceImageData){ctx.clearRect(0,0,canvas.width,canvas.height);analysis.clear();updateGridStatistics(0,0,0);updateMatrixInfo();clearCellInfo();return;}
+ setStatus("Cellák és elemzési mátrix számítása…");
+ setTimeout(()=>{
+  const gridSize=Number(gridSizeInput.value),columns=Math.ceil(sourceCanvas.width/gridSize),rows=Math.ceil(sourceCanvas.height/gridSize);
+  const matrix=Array.from({length:rows},()=>Array(columns));
+  const maxima={rgbSpread:0,maxColorDistance:0,luminanceSpread:0,sobel:0,entropy:0};
+  for(let row=0;row<rows;row++)for(let col=0;col<columns;col++){
+   const x=col*gridSize,y=row*gridSize,width=Math.min(gridSize,sourceCanvas.width-x),height=Math.min(gridSize,sourceCanvas.height-y);
+   const cell=calculateCellStatistics(x,y,width,height);
+   matrix[row][col]=cell;
+   for(const key of METRIC_KEYS)if(cell[key]>maxima[key])maxima[key]=cell[key];
+  }
+  analysis.setGrid(matrix,maxima);
+  updateGridStatistics(columns,rows,analysis.cellCount);updateMatrixInfo();draw();setStatus("Az elemzés és a mátrix elkészült.");
+ },0);
+}
+
+let cachedDirections=null;
+function getColorDirections(){
+ if(cachedDirections)return cachedDirections;const dirs=[];
+ for(let r=-1;r<=1;r++)for(let g=-1;g<=1;g++)for(let b=-1;b<=1;b++){
+  if(r===0&&g===0&&b===0)continue;const len=Math.hypot(r,g,b);dirs.push([r/len,g/len,b/len]);
+ }
+ cachedDirections=dirs;return dirs;
+}
+
+function calculateCellStatistics(x,y,width,height){
+ const data=sourceImageData.data,imageWidth=sourceImageData.width,pixelCount=width*height;let sumR=0,sumG=0,sumB=0,sumSqR=0,sumSqG=0,sumSqB=0,sumL=0,sumSqL=0,sumSobel=0;
+ const histogram=new Uint32Array(256),directions=getColorDirections(),mins=directions.map(()=>({value:Infinity,r:0,g:0,b:0})),maxs=directions.map(()=>({value:-Infinity,r:0,g:0,b:0}));
+ for(let py=y;py<y+height;py++){
+  let index=(py*imageWidth+x)*4,lumIndex=py*imageWidth+x;
+  for(let px=x;px<x+width;px++){
+   const r=data[index],g=data[index+1],b=data[index+2],L=luminanceData[lumIndex];
+   sumR+=r;sumG+=g;sumB+=b;sumSqR+=r*r;sumSqG+=g*g;sumSqB+=b*b;sumL+=L;sumSqL+=L*L;sumSobel+=sobelData[lumIndex];histogram[Math.max(0,Math.min(255,Math.round(L)))]++;
+   for(let d=0;d<directions.length;d++){
+    const dir=directions[d],projection=dir[0]*r+dir[1]*g+dir[2]*b;
+    if(projection<mins[d].value)mins[d]={value:projection,r,g,b};if(projection>maxs[d].value)maxs[d]={value:projection,r,g,b};
+   }
+   index+=4;lumIndex++;
+  }
+ }
+ const avgR=sumR/pixelCount,avgG=sumG/pixelCount,avgB=sumB/pixelCount,avgL=sumL/pixelCount,
+ stdR=Math.sqrt(Math.max(0,sumSqR/pixelCount-avgR*avgR)),stdG=Math.sqrt(Math.max(0,sumSqG/pixelCount-avgG*avgG)),stdB=Math.sqrt(Math.max(0,sumSqB/pixelCount-avgB*avgB)),
+ rgbSpread=Math.hypot(stdR,stdG,stdB),luminanceSpread=Math.sqrt(Math.max(0,sumSqL/pixelCount-avgL*avgL)),sobel=sumSobel/pixelCount;
+ let entropy=0;for(let i=0;i<256;i++){if(histogram[i]===0)continue;const p=histogram[i]/pixelCount;entropy-=p*Math.log2(p);}
+ const candidates=[],seen=new Set();
+ for(let d=0;d<directions.length;d++)for(const c of[mins[d],maxs[d]]){const key=`${c.r},${c.g},${c.b}`;if(!seen.has(key)){seen.add(key);candidates.push(c);}}
+ let maxColorDistance=0;
+ for(let i=0;i<candidates.length;i++)for(let j=i+1;j<candidates.length;j++){
+  const a=candidates[i],b=candidates[j],distance=Math.hypot(a.r-b.r,a.g-b.g,a.b-b.b);if(distance>maxColorDistance)maxColorDistance=distance;
+ }
+ return new Cell({avgR,avgG,avgB,stdR,stdG,stdB,rgbSpread,maxColorDistance,luminanceSpread,sobel,entropy});
+}
+
+function draw(){
+ if(!sourceImage){ctx.clearRect(0,0,canvas.width,canvas.height);return;}
+ const mode=displayModeInput.value;ctx.clearRect(0,0,canvas.width,canvas.height);
+ if(mode==="original"||mode==="originalGrid")ctx.drawImage(sourceImage,0,0);else if(mode==="mosaic")drawMosaic();else drawMetricHeatmap(mode);
+ if(showGridInput.checked||mode==="originalGrid")drawGrid(Number(gridSizeInput.value));updateMetricMaximum();
+}
+function getCellGeometry(row,col,gridSize){
+ const x=col*gridSize,y=row*gridSize;
+ return{x,y,width:Math.min(gridSize,canvas.width-x),height:Math.min(gridSize,canvas.height-y)};
+}
+function drawMosaic(){
+ const gridSize=Number(gridSizeInput.value);
+ for(let row=0;row<analysis.rows;row++)for(let col=0;col<analysis.columns;col++){
+  const cell=analysis.getCell(row,col);if(!cell)continue;
+  const{x,y,width,height}=getCellGeometry(row,col,gridSize);
+  ctx.fillStyle=`rgb(${Math.round(cell.avgR)},${Math.round(cell.avgG)},${Math.round(cell.avgB)})`;
+  ctx.fillRect(x,y,width,height);
+ }
+}
+function drawMetricHeatmap(metric){
+ const gridSize=Number(gridSizeInput.value),maximum=analysis.maxima[metric]||0;
+ for(let row=0;row<analysis.rows;row++)for(let col=0;col<analysis.columns;col++){
+  const cell=analysis.getCell(row,col);if(!cell)continue;
+  const{x,y,width,height}=getCellGeometry(row,col,gridSize);
+  const displayValue=maximum>0?cell[metric]/maximum:0;
+  ctx.fillStyle=heatColor(displayValue);
+  ctx.fillRect(x,y,width,height);
+ }
+}
+function heatColor(t){
+ t=Math.max(0,Math.min(1,t));const stops=[[0,[0,40,140]],[.25,[0,180,220]],[.5,[30,190,70]],[.75,[250,220,40]],[1,[220,30,20]]];
+ for(let i=0;i<stops.length-1;i++){
+  const[t0,c0]=stops[i],[t1,c1]=stops[i+1];if(t>=t0&&t<=t1){const u=(t-t0)/(t1-t0),r=Math.round(c0[0]+(c1[0]-c0[0])*u),g=Math.round(c0[1]+(c1[1]-c0[1])*u),b=Math.round(c0[2]+(c1[2]-c0[2])*u);return`rgb(${r},${g},${b})`;}
+ }
+ return"rgb(220,30,20)";
+}
+function drawGrid(gridSize){
+ const opacity=Number(gridOpacityInput.value)/100;ctx.save();ctx.lineWidth=1;ctx.beginPath();ctx.strokeStyle=`rgba(255,255,255,${opacity})`;
+ for(let x=0;x<=canvas.width;x+=gridSize){const px=Math.min(x,canvas.width)+.5;ctx.moveTo(px,0);ctx.lineTo(px,canvas.height);}
+ for(let y=0;y<=canvas.height;y+=gridSize){const py=Math.min(y,canvas.height)+.5;ctx.moveTo(0,py);ctx.lineTo(canvas.width,py);}ctx.stroke();
+ ctx.beginPath();ctx.strokeStyle=`rgba(0,0,0,${opacity*.45})`;
+ for(let x=0;x<=canvas.width;x+=gridSize){const px=Math.min(x,canvas.width)-.5;ctx.moveTo(px,0);ctx.lineTo(px,canvas.height);}
+ for(let y=0;y<=canvas.height;y+=gridSize){const py=Math.min(y,canvas.height)-.5;ctx.moveTo(0,py);ctx.lineTo(canvas.width,py);}ctx.stroke();ctx.restore();
+}
+
+function showCellInfo(cell,row,col){
+ cellRowBox.textContent=(row+1).toLocaleString("hu-HU");
+ cellColumnBox.textContent=(col+1).toLocaleString("hu-HU");
+ const r=Math.round(cell.avgR),g=Math.round(cell.avgG),b=Math.round(cell.avgB);cellAverageBox.textContent=`${r}, ${g}, ${b}`;cellSwatch.style.backgroundColor=`rgb(${r},${g},${b})`;
+ cellStdRBox.textContent=cell.stdR.toFixed(2);cellStdGBox.textContent=cell.stdG.toFixed(2);cellStdBBox.textContent=cell.stdB.toFixed(2);cellCombinedBox.textContent=cell.rgbSpread.toFixed(2);
+ cellMaxColorDistanceBox.textContent=cell.maxColorDistance.toFixed(2);cellLuminanceSpreadBox.textContent=cell.luminanceSpread.toFixed(2);cellSobelBox.textContent=cell.sobel.toFixed(2);
+ cellEntropyBox.textContent=`${cell.entropy.toFixed(3)} bit`;
+}
+function clearCellInfo(){
+ for(const el of[cellRowBox,cellColumnBox,cellAverageBox,cellStdRBox,cellStdGBox,cellStdBBox,cellCombinedBox,cellMaxColorDistanceBox,cellLuminanceSpreadBox,cellSobelBox,cellEntropyBox])el.textContent="—";
+ cellSwatch.style.backgroundColor="transparent";
+}
+function updateGridStatistics(columnCount,rowCount,cellCount){
+ columnCountBox.textContent=columnCount?columnCount.toLocaleString("hu-HU"):"—";rowCountBox.textContent=rowCount?rowCount.toLocaleString("hu-HU"):"—";cellCountBox.textContent=cellCount?cellCount.toLocaleString("hu-HU"):"—";if(!cellCount)metricMaximumBox.textContent="—";
+}
+function updateMatrixInfo(){
+ if(analysis.cellCount&&analysis.isRectangular()){
+  matrixSizeBox.textContent=`${analysis.rows} × ${analysis.columns}`;matrixStatusBox.textContent="Létrehozva, minden cella elérhető.";matrixStatusBox.className="matrix-ok";
+ }else{matrixSizeBox.textContent="—";matrixStatusBox.textContent="Nincs létrehozva.";matrixStatusBox.className="matrix-empty";}
+}
+function updateMetricMaximum(){
+ const mode=displayModeInput.value;if(METRIC_KEYS.includes(mode))metricMaximumBox.textContent=formatMetricValue(mode,analysis.maxima[mode]||0);else metricMaximumBox.textContent="—";
+}
+function formatMetricValue(metric,value){return`${Number(value).toFixed(metric==="entropy"?3:2)}${metric==="entropy"?" bit":""}`;}
+function updateMetricDescription(){metricNote.textContent=metricDescriptions[displayModeInput.value]||"";}
+function setStatus(text){statusBox.textContent=text;}
+updateMetricDescription();updateMatrixInfo();
 </script>
 </body>
 </html>

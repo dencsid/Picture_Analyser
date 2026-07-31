@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.12/C – valószínűségi prioritási pont</title>
+<title>Picture Analyzer Lab V0.12/D – kijelölés és PDF javítása</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -280,14 +280,14 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.12/C – valószínűségi prioritási pont</h1>
+  <h1>Picture Analyzer Lab V0.12/D – kijelölés és PDF javítása</h1>
   <p>Kézi körkiválasztás, állítható rétegátlátszóság és egyetlen belülről érintő utódkör javaslata.</p>
 </header>
 <main>
 <section class="panel">
   <label class="file-label" for="imageInput">Kép betöltése</label>
   <input id="imageInput" type="file" accept="image/*">
-
+/**********************/
   <div class="control">
     <label for="displayMode"><span>Megjelenítési mód</span></label>
     <select id="displayMode">
@@ -1406,13 +1406,28 @@ function suggestChildCircle(){
 function acceptChildCircle(){
   if(!childCircleSuggestion)return;
   const c=childCircleSuggestion;
-  reconstructionCircles.push({x:c.x,y:c.y,radius:c.radius,color:c.color,detail:c.detail,parent:selectedReconstructionCircle});
-  selectedReconstructionCircle=reconstructionCircles[reconstructionCircles.length-1];
+
+  reconstructionCircles.push({
+    x:c.x,
+    y:c.y,
+    radius:c.radius,
+    color:{
+      r:Number.isFinite(c.color?.r)?c.color.r:0,
+      g:Number.isFinite(c.color?.g)?c.color.g:0,
+      b:Number.isFinite(c.color?.b)?c.color.b:0
+    },
+    detail:Number.isFinite(c.detail)?c.detail:0
+  });
+
+  selectedReconstructionCircle=null;
   childCircleSuggestion=null;
   childPriorityCandidates=[];
   selectedChildPriorityPoint=null;
-  updateReconstructionStats();updateChildCircleStats();scheduleDraw();
-  setStatus("Az utódkör hozzáadva. Az új kör lett kiválasztva, így tovább finomítható.");
+
+  updateReconstructionStats();
+  updateChildCircleStats();
+  scheduleDraw();
+  setStatus("Az utódkör hozzáadva. A kijelölés megszűnt; újabb kör finomításához kattints egy körre.");
 }
 function updateChildCircleStats(){
   const p=selectedReconstructionCircle;
@@ -1445,6 +1460,11 @@ function buildPdf(objects,rootId,infoId){
   out+=`trailer\n<< /Size ${objects.length+1} /Root ${rootId} 0 R /Info ${infoId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return new Blob([new TextEncoder().encode(out)],{type:"application/pdf"});
 }
+function safePdfColorComponent(value){
+  const number=Number(value);
+  if(!Number.isFinite(number))return 0;
+  return Math.max(0,Math.min(255,number))/255;
+}
 function saveReconstructionPdf(){
   if(!sourceImage||!reconstructionCircles.length)return;
   const limits=getPhysicalCircleLimits();if(!limits)return;
@@ -1457,7 +1477,10 @@ function saveReconstructionPdf(){
     let art=`1 1 1 rg\n0 0 ${pageW.toFixed(3)} ${pageH.toFixed(3)} re f\n`;
     for(const c of reconstructionCircles){
       const x=offsetX+c.x*scale,y=pageH-(offsetY+c.y*scale),r=c.radius*scale;
-      art+=`${(c.color.r/255).toFixed(4)} ${(c.color.g/255).toFixed(4)} ${(c.color.b/255).toFixed(4)} rg\n`;
+      const red=safePdfColorComponent(c.color?.r);
+      const green=safePdfColorComponent(c.color?.g);
+      const blue=safePdfColorComponent(c.color?.b);
+      art+=`${red.toFixed(4)} ${green.toFixed(4)} ${blue.toFixed(4)} rg\n`;
       art+=circlePdfPath(x,y,r)+"f\n";
     }
     const a4w=595.276,a4h=841.89;

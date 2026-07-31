@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.10 – #15/A részleges körrekonstrukció</title>
+<title>Picture Analyzer Lab V0.12/A – kiválasztott kör részletvizsgálata</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -28,13 +28,15 @@ button{margin-top:14px;width:100%;border:0;border-radius:8px;padding:10px 12px;b
 .combined-summary{margin-top:10px;padding:8px;border:1px solid #d4e6d7;border-radius:7px;background:#fff;font-size:13px;line-height:1.45}
 .radius-controls{margin-top:17px;padding:12px;border:1px solid #b9c9dc;border-radius:8px;background:#f6f9fd}.radius-controls[hidden]{display:none}.radius-controls h2{font-size:15px;margin:0 0 8px;color:#244f7a}.radius-stats{margin-top:12px;padding:9px;background:#fff;border:1px solid #d7e0ea;border-radius:7px;font-size:13px;line-height:1.55}.chart-wrap{margin-top:12px;background:#fff;border:1px solid #d7e0ea;border-radius:7px;padding:7px}#radiusChart{display:block;width:100%;height:150px;cursor:default}.inline-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}.inline-buttons button{margin-top:10px}.small-note{font-size:12px;color:#555;line-height:1.35;margin-top:6px}
 
-.reconstruction-controls{margin-top:17px;padding:12px;border:1px solid #c8b8df;border-radius:8px;background:#faf7ff}.reconstruction-controls h2{font-size:15px;margin:0 0 8px;color:#5b347d}.reconstruction-controls[hidden]{display:none}.two-columns{display:grid;grid-template-columns:1fr 1fr;gap:9px}.number-input{width:100%;padding:8px 9px;border:1px solid #bbb;border-radius:7px}.calculated-box{margin-top:10px;padding:9px;background:#fff;border:1px solid #ddd;border-radius:7px;font-size:13px;line-height:1.5}.reconstruction-stats{margin-top:10px;padding:9px;background:#fff;border:1px solid #ded4e8;border-radius:7px;font-size:13px;line-height:1.5}.button-row{display:grid;grid-template-columns:1fr 1fr;gap:8px}.button-row button{margin-top:10px}
+.reconstruction-controls{margin-top:17px;padding:12px;border:1px solid #c8b8df;border-radius:8px;background:#faf7ff}.reconstruction-controls h2{font-size:15px;margin:0 0 8px;color:#5b347d}.reconstruction-controls[hidden]{display:none}.two-columns{display:grid;grid-template-columns:1fr 1fr;gap:9px}.number-input{width:100%;padding:8px 9px;border:1px solid #bbb;border-radius:7px}.calculated-box{margin-top:10px;padding:9px;background:#fff;border:1px solid #ddd;border-radius:7px;font-size:13px;line-height:1.5}.reconstruction-stats{margin-top:10px;padding:9px;background:#fff;border:1px solid #ded4e8;border-radius:7px;font-size:13px;line-height:1.5}.button-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.button-row button{margin-top:10px}
+.inspection-box{margin-top:12px;padding:10px;background:#fff;border:1px solid #c9e4e7;border-radius:7px;font-size:13px;line-height:1.55}
+.inspection-box h3{margin:0 0 7px;color:#16636a;font-size:14px}.inspection-box .hint{color:#555;font-size:12px;margin-top:7px}
 </style>
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.10 – #15/A részleges körrekonstrukció</h1>
-  <p>Képkategória, fizikai végméret és állítható körfelbontás alapján készülő első, részleges körrajz.</p>
+  <h1>Picture Analyzer Lab V0.12/A – kiválasztott kör részletvizsgálata</h1>
+  <p>Kézi körkiválasztás, külön rétegátlátszóság és a kiválasztott kör alatti részletességi térkép vizsgálata.</p>
 </header>
 <main>
 <section class="panel">
@@ -165,12 +167,34 @@ button{margin-top:14px;width:100%;border:0;border-radius:8px;padding:10px 12px;b
       <input id="maxCircleDiameterMm" type="range" min="5" max="400" step="5" value="80">
     </div>
     <div class="control">
-      <label for="reconstructionCircleCount"><span>Próbagenerálás körszáma</span><span id="reconstructionCircleCountValue">400</span></label>
-      <input id="reconstructionCircleCount" type="range" min="20" max="2000" step="20" value="400">
+      <label for="reconstructionCircleCount"><span>Maximális körszám</span><span id="reconstructionCircleCountValue">1000</span></label>
+      <input id="reconstructionCircleCount" type="range" min="100" max="50000" step="100" value="1000">
+      <div class="metric-note">A generálás korábban is megállhat, ha a minimális körmérettel már nem található több szabad hely.</div>
     </div>
-    <div class="row"><input id="showSourceUnderCircles" type="checkbox"><label for="showSourceUnderCircles">Eredeti kép halványan a körök alatt</label></div>
+    <div class="control">
+      <label for="sourceLayerOpacity"><span>Eredeti kép láthatósága</span><span><span id="sourceLayerOpacityValue">35</span>%</span></label>
+      <input id="sourceLayerOpacity" type="range" min="5" max="100" step="1" value="35">
+      <div class="metric-note">Az eredeti kép mindig látható; ezzel a csúszkával halványítható vagy erősíthető.</div>
+    </div>
+    <div class="control">
+      <label for="circleLayerOpacity"><span>Körréteg láthatósága</span><span><span id="circleLayerOpacityValue">100</span>%</span></label>
+      <input id="circleLayerOpacity" type="range" min="5" max="100" step="1" value="100">
+      <div class="metric-note">A körök sem kapcsolhatók ki teljesen, így a két réteg mindig együtt látható.</div>
+    </div>
+    <div class="control">
+      <label for="selectedDetailOpacity"><span>Kiválasztott kör részlettérképe</span><span><span id="selectedDetailOpacityValue">60</span>%</span></label>
+      <input id="selectedDetailOpacity" type="range" min="0" max="100" step="1" value="60">
+    </div>
+    <div id="circleInspectionBox" class="inspection-box">
+      <h3>V0.12/A – Körvizsgálat</h3>
+      <div><strong>Kiválasztott kör:</strong> <span id="selectedCircleStat">—</span></div>
+      <div><strong>Középpont és sugár:</strong> <span id="selectedCircleGeometry">—</span></div>
+      <div><strong>Legnagyobb részletesség helye:</strong> <span id="selectedDetailPoint">—</span></div>
+      <div><strong>Legnagyobb részletesség:</strong> <span id="selectedDetailValue">—</span></div>
+      <div class="hint">A körrekonstrukción kattints egy körre. Ez a változat még nem hoz létre utódkört.</div>
+    </div>
     <div id="physicalCircleInfo" class="calculated-box">Tölts be egy képet a fizikai méret képpontokra váltásához.</div>
-    <div class="button-row"><button id="generateReconstruction" disabled>Körrekonstrukció készítése</button><button id="clearReconstruction" disabled>Körök törlése</button></div>
+    <div class="button-row"><button id="generateReconstruction" disabled>Körrekonstrukció készítése</button><button id="clearReconstruction" disabled>Körök törlése</button><button id="saveReconstructionPdf" disabled>Mentés PDF-ként</button></div>
     <div class="reconstruction-stats">
       <div><strong>Kategória:</strong> <span id="reconstructionCategoryStat">—</span></div>
       <div><strong>Elhelyezett körök:</strong> <span id="placedCircleCount">0</span></div>
@@ -255,7 +279,7 @@ const corridorOpacityInput = $("corridorOpacity");
 const corridorOpacityValue = $("corridorOpacityValue");
 const splitCorridorSidesInput = $("splitCorridorSides");
 const combinedControls=$("combinedControls"),sobelWeightInput=$("sobelWeight"),sobelWeightValue=$("sobelWeightValue"),rgbSpreadWeightInput=$("rgbSpreadWeight"),rgbSpreadWeightValue=$("rgbSpreadWeightValue"),combinedFormula=$("combinedFormula");
-const reconstructionControls=$("reconstructionControls"),imageCategoryInput=$("imageCategory"),finalWidthCmInput=$("finalWidthCm"),finalHeightCmInput=$("finalHeightCm"),lockFinalAspectInput=$("lockFinalAspect"),minCircleDiameterMmInput=$("minCircleDiameterMm"),minCircleDiameterMmValue=$("minCircleDiameterMmValue"),maxCircleDiameterMmInput=$("maxCircleDiameterMm"),maxCircleDiameterMmValue=$("maxCircleDiameterMmValue"),reconstructionCircleCountInput=$("reconstructionCircleCount"),reconstructionCircleCountValue=$("reconstructionCircleCountValue"),showSourceUnderCirclesInput=$("showSourceUnderCircles"),physicalCircleInfo=$("physicalCircleInfo"),generateReconstructionButton=$("generateReconstruction"),clearReconstructionButton=$("clearReconstruction"),reconstructionCategoryStat=$("reconstructionCategoryStat"),placedCircleCountBox=$("placedCircleCount"),minimumRadiusStat=$("minimumRadiusStat"),maximumRadiusStat=$("maximumRadiusStat");
+const reconstructionControls=$("reconstructionControls"),imageCategoryInput=$("imageCategory"),finalWidthCmInput=$("finalWidthCm"),finalHeightCmInput=$("finalHeightCm"),lockFinalAspectInput=$("lockFinalAspect"),minCircleDiameterMmInput=$("minCircleDiameterMm"),minCircleDiameterMmValue=$("minCircleDiameterMmValue"),maxCircleDiameterMmInput=$("maxCircleDiameterMm"),maxCircleDiameterMmValue=$("maxCircleDiameterMmValue"),reconstructionCircleCountInput=$("reconstructionCircleCount"),reconstructionCircleCountValue=$("reconstructionCircleCountValue"),sourceLayerOpacityInput=$("sourceLayerOpacity"),sourceLayerOpacityValue=$("sourceLayerOpacityValue"),circleLayerOpacityInput=$("circleLayerOpacity"),circleLayerOpacityValue=$("circleLayerOpacityValue"),selectedDetailOpacityInput=$("selectedDetailOpacity"),selectedDetailOpacityValue=$("selectedDetailOpacityValue"),selectedCircleStat=$("selectedCircleStat"),selectedCircleGeometry=$("selectedCircleGeometry"),selectedDetailPoint=$("selectedDetailPoint"),selectedDetailValue=$("selectedDetailValue"),physicalCircleInfo=$("physicalCircleInfo"),generateReconstructionButton=$("generateReconstruction"),clearReconstructionButton=$("clearReconstruction"),saveReconstructionPdfButton=$("saveReconstructionPdf"),reconstructionCategoryStat=$("reconstructionCategoryStat"),placedCircleCountBox=$("placedCircleCount"),minimumRadiusStat=$("minimumRadiusStat"),maximumRadiusStat=$("maximumRadiusStat");
 const radiusControls=$("radiusControls"),detailGammaInput=$("detailGamma"),detailGammaValue=$("detailGammaValue"),darkCandidatePercentInput=$("darkCandidatePercent"),darkCandidatePercentValue=$("darkCandidatePercentValue"),maxTestRadiusInput=$("maxTestRadius"),maxTestRadiusValue=$("maxTestRadiusValue"),radiusStepInput=$("radiusStep"),radiusStepValue=$("radiusStepValue"),ringWidthInput=$("ringWidth"),ringWidthValue=$("ringWidthValue"),ringThresholdInput=$("ringThreshold"),ringThresholdValue=$("ringThresholdValue"),jumpThresholdInput=$("jumpThreshold"),jumpThresholdValue=$("jumpThresholdValue"),manualRadiusInput=$("manualRadius"),manualRadiusValue=$("manualRadiusValue"),showSuggestedCircleInput=$("showSuggestedCircle"),fillFirstCircleInput=$("fillFirstCircle"),chooseDarkPointButton=$("chooseDarkPoint"),createFirstCircleButton=$("createFirstCircle"),clearRadiusTestButton=$("clearRadiusTest"),testCenterBox=$("testCenter"),currentRadiusStatBox=$("currentRadiusStat"),diskAverageBox=$("diskAverage"),ringAverageBox=$("ringAverage"),suggestedRadiusBox=$("suggestedRadius"),stopReasonBox=$("stopReason"),firstCircleColorBox=$("firstCircleColor"),radiusChart=$("radiusChart"),radiusChartCtx=radiusChart.getContext("2d");
 const edgeThresholdBox = $("edgeThreshold");
 const resetViewButton = $("resetView");
@@ -298,7 +322,7 @@ let cachedDirections = null;
 let corridorCacheKey = "";
 let corridorDistance = null;
 let corridorNearestEdge = null;
-let detailData=null,radiusTest=null,firstCircle=null,rawSobelMaximum=0,reconstructionCircles=[];
+let detailData=null,radiusTest=null,firstCircle=null,rawSobelMaximum=0,reconstructionCircles=[],selectedReconstructionCircleIndex=-1,selectedDetailMaximum=null;
 
 const metricDescriptions = {
   original: "Az eredeti kép változtatás nélkül.",
@@ -340,7 +364,7 @@ imageInput.addEventListener("change", async () => {
     fileNameBox.textContent = file.name;
     imageSizeBox.textContent = `${bitmap.width} × ${bitmap.height} px`;
     if (lockFinalAspectInput.checked) finalHeightCmInput.value = (Number(finalWidthCmInput.value) * bitmap.height / bitmap.width).toFixed(1);
-    resetViewButton.disabled=false;chooseDarkPointButton.disabled=false;createFirstCircleButton.disabled=false;clearRadiusTestButton.disabled=false;generateReconstructionButton.disabled=false;clearReconstructionButton.disabled=false;reconstructionCircles=[];updatePhysicalCircleInfo();
+    resetViewButton.disabled=false;chooseDarkPointButton.disabled=false;createFirstCircleButton.disabled=false;clearRadiusTestButton.disabled=false;generateReconstructionButton.disabled=false;clearReconstructionButton.disabled=false;saveReconstructionPdfButton.disabled=true;reconstructionCircles=[];selectedReconstructionCircleIndex=-1;selectedDetailMaximum=null;updateSelectedCircleInspection();updatePhysicalCircleInfo();
     prepareDerivedImages();
     analyzeAndDraw();
   } catch (error) {
@@ -365,6 +389,7 @@ displayModeInput.addEventListener("change", () => {
 });
 gridSizeInput.addEventListener("input", () => {
   gridSizeValue.textContent = gridSizeInput.value;
+  selectedDetailMaximum=null;
   analyzeAndDraw();
 });
 showGridInput.addEventListener("change", scheduleDraw);
@@ -394,16 +419,20 @@ lockFinalAspectInput.addEventListener("change",()=>{if(lockFinalAspectInput.chec
 minCircleDiameterMmInput.addEventListener("input",()=>{minCircleDiameterMmValue.textContent=Number(minCircleDiameterMmInput.value).toFixed(1);updatePhysicalCircleInfo();});
 maxCircleDiameterMmInput.addEventListener("input",()=>{maxCircleDiameterMmValue.textContent=maxCircleDiameterMmInput.value;updatePhysicalCircleInfo();});
 reconstructionCircleCountInput.addEventListener("input",()=>reconstructionCircleCountValue.textContent=reconstructionCircleCountInput.value);
-showSourceUnderCirclesInput.addEventListener("change",scheduleDraw);
+sourceLayerOpacityInput.addEventListener("input",()=>{sourceLayerOpacityValue.textContent=sourceLayerOpacityInput.value;scheduleDraw();});
+circleLayerOpacityInput.addEventListener("input",()=>{circleLayerOpacityValue.textContent=circleLayerOpacityInput.value;scheduleDraw();});
+selectedDetailOpacityInput.addEventListener("input",()=>{selectedDetailOpacityValue.textContent=selectedDetailOpacityInput.value;scheduleDraw();});
 imageCategoryInput.addEventListener("change",()=>reconstructionCategoryStat.textContent=imageCategoryInput.options[imageCategoryInput.selectedIndex].text);
 generateReconstructionButton.addEventListener("click",generatePartialReconstruction);
-clearReconstructionButton.addEventListener("click",()=>{reconstructionCircles=[];updateReconstructionStats();scheduleDraw();});
+clearReconstructionButton.addEventListener("click",()=>{reconstructionCircles=[];selectedReconstructionCircleIndex=-1;selectedDetailMaximum=null;saveReconstructionPdfButton.disabled=true;updateReconstructionStats();updateSelectedCircleInspection();scheduleDraw();});
+saveReconstructionPdfButton.addEventListener("click",saveReconstructionPdf);
 
 [sobelWeightInput, rgbSpreadWeightInput].forEach(input => input.addEventListener("input", () => {
   sobelWeightValue.textContent = sobelWeightInput.value;
   rgbSpreadWeightValue.textContent = rgbSpreadWeightInput.value;
   combinedFormula.textContent = `${sobelWeightInput.value}% Sobel + ${rgbSpreadWeightInput.value}% színszórás`;
   recalculateCombinedDetail();
+  if(selectedReconstructionCircleIndex>=0){selectedDetailMaximum=findSelectedCircleDetailMaximum(reconstructionCircles[selectedReconstructionCircleIndex]);updateSelectedCircleInspection();}
   scheduleDraw();
 }));
 [detailGammaInput,darkCandidatePercentInput,maxTestRadiusInput,radiusStepInput,ringWidthInput,ringThresholdInput,jumpThresholdInput,manualRadiusInput].forEach(el=>el.addEventListener("input",()=>{detailGammaValue.textContent=detailGammaInput.value;darkCandidatePercentValue.textContent=darkCandidatePercentInput.value;maxTestRadiusValue.textContent=maxTestRadiusInput.value;radiusStepValue.textContent=radiusStepInput.value;ringWidthValue.textContent=ringWidthInput.value;ringThresholdValue.textContent=ringThresholdInput.value;jumpThresholdValue.textContent=jumpThresholdInput.value;manualRadiusValue.textContent=manualRadiusInput.value;manualRadiusInput.max=maxTestRadiusInput.value;if(el===detailGammaInput)buildDetailMap();if(radiusTest&&el!==manualRadiusInput)analyzeRadiusAt(radiusTest.x,radiusTest.y);else{updateRadiusStatistics();scheduleDraw();}}));
@@ -437,7 +466,19 @@ resetViewButton.addEventListener("click", () => {
   analyzeAndDraw();
 });
 
-canvas.addEventListener("click",event=>{if(!sourceImage||!["detailMap","detailOverlay","firstCircle"].includes(displayModeInput.value))return;const r=canvas.getBoundingClientRect(),x=Math.floor((event.clientX-r.left)*canvas.width/r.width),y=Math.floor((event.clientY-r.top)*canvas.height/r.height);analyzeRadiusAt(x,y);});
+canvas.addEventListener("click",event=>{
+  if(!sourceImage)return;
+  const r=canvas.getBoundingClientRect();
+  const x=(event.clientX-r.left)*canvas.width/r.width;
+  const y=(event.clientY-r.top)*canvas.height/r.height;
+  if(displayModeInput.value==="partialReconstruction"){
+    selectReconstructionCircleAt(x,y);
+    return;
+  }
+  if(["detailMap","detailOverlay","firstCircle"].includes(displayModeInput.value)){
+    analyzeRadiusAt(Math.floor(x),Math.floor(y));
+  }
+});
 canvas.addEventListener("mousemove", event => {
   if (!sourceImage || analysis.cells.length === 0) return;
   const rect = canvas.getBoundingClientRect();
@@ -521,6 +562,7 @@ function analyzeAndDraw() {
       }
     }
     recalculateCombinedDetail();
+    if(selectedReconstructionCircleIndex>=0&&reconstructionCircles[selectedReconstructionCircleIndex]){selectedDetailMaximum=findSelectedCircleDetailMaximum(reconstructionCircles[selectedReconstructionCircleIndex]);updateSelectedCircleInspection();}
     updateGridStatistics();
     draw();
     setStatus("Az elemzés és a kombinált részletességi térkép elkészült.");
@@ -839,53 +881,278 @@ function updatePhysicalCircleInfo(){
   if(!q){physicalCircleInfo.textContent="Tölts be egy képet a fizikai méret képpontokra váltásához.";return;}
   physicalCircleInfo.innerHTML=`<strong>Átszámítás:</strong> 1 mm ≈ ${q.pxPerMm.toFixed(2)} px<br><strong>Legkisebb átmérő:</strong> ${(2*q.minRadius).toFixed(1)} px<br><strong>Legnagyobb átmérő:</strong> ${(2*q.maxRadius).toFixed(1)} px`;
 }
-function deterministicNoise(n){let x=Math.sin(n*12.9898+78.233)*43758.5453;return x-Math.floor(x);}
+function mulberry32(seed){return function(){let x=seed+=0x6D2B79F5;x=Math.imul(x^x>>>15,x|1);x^=x+Math.imul(x^x>>>7,x|61);return((x^x>>>14)>>>0)/4294967296;};}
+function getDetailCellAt(x,y){
+  const gridSize=Number(gridSizeInput.value);
+  const col=Math.max(0,Math.min(analysis.columns-1,Math.floor(x/gridSize)));
+  const row=Math.max(0,Math.min(analysis.rows-1,Math.floor(y/gridSize)));
+  return analysis.getCell(row,col);
+}
 function generatePartialReconstruction(){
   if(!sourceImage||!analysis.cells.length)return;
   const limits=getPhysicalCircleLimits();if(!limits)return;
-  setStatus("Részleges körrekonstrukció készítése…");
-  setTimeout(()=>{
-    const gridSize=Number(gridSizeInput.value),requested=Number(reconstructionCircleCountInput.value);
-    const candidates=analysis.cells.map((cell,index)=>({
-      x:Math.min(sourceImage.width-1,cell.col*gridSize+gridSize/2),
-      y:Math.min(sourceImage.height-1,cell.row*gridSize+gridSize/2),
-      detail:Math.max(0,Math.min(1,cell.combinedDetail)),cell,index,
-      priority:.72*Math.max(0,Math.min(1,cell.combinedDetail))+.28*deterministicNoise(index+1)
-    })).sort((a,b)=>b.priority-a.priority);
-    const circles=[];
-    for(const c of candidates){
-      if(circles.length>=requested)break;
-      const desired=limits.maxRadius-(limits.maxRadius-limits.minRadius)*Math.pow(c.detail,.72);
-      let clearance=Math.min(c.x,c.y,sourceImage.width-c.x,sourceImage.height-c.y);
-      for(const old of circles){
-        const d=Math.hypot(c.x-old.x,c.y-old.y)-old.radius;
-        if(d<clearance)clearance=d;
-        if(clearance<limits.minRadius)break;
+  const requested=Number(reconstructionCircleCountInput.value);
+  const width=sourceImage.width,height=sourceImage.height;
+  const circles=[];
+  const seed=(width*73856093^height*19349663^requested*83492791)>>>0;
+  const random=mulberry32(seed);
+  const bucketSize=Math.max(8,Math.min(limits.maxRadius,Math.max(limits.minRadius*4,24)));
+  const buckets=new Map();
+  const key=(bx,by)=>`${bx},${by}`;
+  const insert=c=>{const k=key(Math.floor(c.x/bucketSize),Math.floor(c.y/bucketSize));let list=buckets.get(k);if(!list)buckets.set(k,list=[]);list.push(c);};
+  const maxAttempts=Math.min(3000000,Math.max(10000,requested*60));
+  let attempts=0;
+  reconstructionCircles=[];selectedReconstructionCircleIndex=-1;selectedDetailMaximum=null;updateSelectedCircleInspection();
+  generateReconstructionButton.disabled=true;
+  clearReconstructionButton.disabled=true;
+  saveReconstructionPdfButton.disabled=true;
+  displayModeInput.value="partialReconstruction";updateMetricDescription();updateEdgeControlsVisibility();
+  setStatus(`Szabad középpontú körök generálása: 0 / ${requested.toLocaleString()}…`);
+
+  const processChunk=()=>{
+    const chunkEnd=Math.min(maxAttempts,attempts+2500);
+    while(attempts<chunkEnd&&circles.length<requested){
+      attempts++;
+      const x=limits.minRadius+random()*Math.max(1,width-2*limits.minRadius);
+      const y=limits.minRadius+random()*Math.max(1,height-2*limits.minRadius);
+      const cell=getDetailCellAt(x,y);if(!cell)continue;
+      const detail=Math.max(0,Math.min(1,cell.combinedDetail));
+      const desired=limits.maxRadius-(limits.maxRadius-limits.minRadius)*Math.pow(detail,.72);
+      let clearance=Math.min(x,y,width-x,height-y);
+      const reach=Math.ceil((limits.maxRadius+desired)/bucketSize);
+      const bx=Math.floor(x/bucketSize),by=Math.floor(y/bucketSize);
+      for(let yy=by-reach;yy<=by+reach&&clearance>=limits.minRadius;yy++){
+        for(let xx=bx-reach;xx<=bx+reach&&clearance>=limits.minRadius;xx++){
+          const list=buckets.get(key(xx,yy));if(!list)continue;
+          for(const old of list){
+            const d=Math.hypot(x-old.x,y-old.y)-old.radius;
+            if(d<clearance)clearance=d;
+            if(clearance<limits.minRadius)break;
+          }
+        }
       }
       if(clearance<limits.minRadius)continue;
       const radius=Math.max(limits.minRadius,Math.min(desired,clearance));
-      circles.push({x:c.x,y:c.y,radius,color:{r:Math.round(c.cell.avgR),g:Math.round(c.cell.avgG),b:Math.round(c.cell.avgB)},detail:c.detail});
+      const color={r:Math.round(cell.avgR),g:Math.round(cell.avgG),b:Math.round(cell.avgB)};
+      const circle={x,y,radius,color,detail};
+      circles.push(circle);insert(circle);
     }
     reconstructionCircles=circles;
-    displayModeInput.value="partialReconstruction";updateMetricDescription();updateEdgeControlsVisibility();updateReconstructionStats();draw();
-    setStatus(`${circles.length.toLocaleString()} körből álló részleges rekonstrukció elkészült.`);
-  },0);
+    updateReconstructionStats();draw();
+    setStatus(`Szabad középpontú körök generálása: ${circles.length.toLocaleString()} / ${requested.toLocaleString()} (${attempts.toLocaleString()} próba)…`);
+    if(circles.length<requested&&attempts<maxAttempts){
+      setTimeout(processChunk,0);
+    }else{
+      generateReconstructionButton.disabled=false;
+      clearReconstructionButton.disabled=false;
+      saveReconstructionPdfButton.disabled=circles.length===0;
+      const reason=circles.length>=requested?"a kért körszám elérve":"nem talált több megfelelő helyet";
+      setStatus(`${circles.length.toLocaleString()} szabad középpontú kör elkészült; ${reason}.`);
+    }
+  };
+  setTimeout(processChunk,0);
 }
 function drawPartialReconstruction(){
   ctx.save();
-  if(showSourceUnderCirclesInput.checked){ctx.globalAlpha=.22;ctx.drawImage(sourceImage,0,0);ctx.globalAlpha=1;}else{ctx.fillStyle="white";ctx.fillRect(0,0,canvas.width,canvas.height);}
+  ctx.fillStyle="white";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  ctx.globalAlpha=Number(sourceLayerOpacityInput.value)/100;
+  ctx.drawImage(sourceImage,0,0);
+
+  ctx.globalAlpha=Number(circleLayerOpacityInput.value)/100;
   for(const circle of reconstructionCircles){
     ctx.fillStyle=`rgb(${circle.color.r},${circle.color.g},${circle.color.b})`;
-    ctx.beginPath();ctx.arc(circle.x,circle.y,circle.radius,0,Math.PI*2);ctx.fill();
-    ctx.strokeStyle="black";ctx.lineWidth=Math.max(1,circle.radius*.025);ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(circle.x,circle.y,circle.radius,0,Math.PI*2);
+    ctx.fill();
+  }
+  ctx.globalAlpha=1;
+
+  drawSelectedCircleDetailOverlay();
+  drawSelectedCircleMarker();
+  ctx.restore();
+}
+
+function selectReconstructionCircleAt(x,y){
+  let bestIndex=-1;
+  let bestRadius=Infinity;
+  for(let i=0;i<reconstructionCircles.length;i++){
+    const c=reconstructionCircles[i];
+    if(Math.hypot(x-c.x,y-c.y)<=c.radius && c.radius<bestRadius){
+      bestIndex=i;
+      bestRadius=c.radius;
+    }
+  }
+  selectedReconstructionCircleIndex=bestIndex;
+  selectedDetailMaximum=bestIndex>=0?findSelectedCircleDetailMaximum(reconstructionCircles[bestIndex]):null;
+  updateSelectedCircleInspection();
+  if(bestIndex>=0)setStatus(`A(z) ${bestIndex+1}. kör kiválasztva. A kör alatti részletességi térkép látható.`);
+  else setStatus("A kattintás helyén nincs kiválasztható kör.");
+  scheduleDraw();
+}
+
+function findSelectedCircleDetailMaximum(circle){
+  if(!analysis.cells.length)return null;
+  const gridSize=Number(gridSizeInput.value);
+  let best=null;
+  for(const cell of analysis.cells){
+    const x=Math.min(canvas.width-1,(cell.col+.5)*gridSize);
+    const y=Math.min(canvas.height-1,(cell.row+.5)*gridSize);
+    if(Math.hypot(x-circle.x,y-circle.y)>circle.radius)continue;
+    if(!best||cell.combinedDetail>best.value)best={x,y,value:cell.combinedDetail,cell};
+  }
+  return best;
+}
+
+function drawSelectedCircleDetailOverlay(){
+  if(selectedReconstructionCircleIndex<0||!selectedDetailMaximum)return;
+  const circle=reconstructionCircles[selectedReconstructionCircleIndex];
+  const gridSize=Number(gridSizeInput.value);
+  const opacity=Number(selectedDetailOpacityInput.value)/100;
+  if(opacity<=0)return;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(circle.x,circle.y,circle.radius,0,Math.PI*2);
+  ctx.clip();
+  ctx.globalAlpha=opacity;
+
+  for(const cell of analysis.cells){
+    const x=cell.col*gridSize;
+    const y=cell.row*gridSize;
+    const width=Math.min(gridSize,canvas.width-x);
+    const height=Math.min(gridSize,canvas.height-y);
+    const cx=x+width/2,cy=y+height/2;
+    if(Math.hypot(cx-circle.x,cy-circle.y)>circle.radius+gridSize*.72)continue;
+    ctx.fillStyle=heatColor(Math.max(0,Math.min(1,cell.combinedDetail)));
+    ctx.fillRect(x,y,width,height);
   }
   ctx.restore();
 }
+
+function drawSelectedCircleMarker(){
+  if(selectedReconstructionCircleIndex<0)return;
+  const circle=reconstructionCircles[selectedReconstructionCircleIndex];
+  ctx.save();
+  ctx.lineWidth=Math.max(2,Math.min(6,circle.radius*.035));
+  ctx.strokeStyle="cyan";
+  ctx.setLineDash([10,7]);
+  ctx.beginPath();
+  ctx.arc(circle.x,circle.y,circle.radius,0,Math.PI*2);
+  ctx.stroke();
+
+  if(selectedDetailMaximum){
+    const p=selectedDetailMaximum;
+    const size=Math.max(5,Math.min(14,circle.radius*.12));
+    ctx.setLineDash([]);
+    ctx.lineWidth=Math.max(2,size*.22);
+    ctx.strokeStyle="white";
+    ctx.beginPath();
+    ctx.moveTo(p.x-size,p.y);ctx.lineTo(p.x+size,p.y);
+    ctx.moveTo(p.x,p.y-size);ctx.lineTo(p.x,p.y+size);
+    ctx.stroke();
+    ctx.lineWidth=Math.max(1,size*.1);
+    ctx.strokeStyle="black";
+    ctx.strokeRect(p.x-size*.22,p.y-size*.22,size*.44,size*.44);
+  }
+  ctx.restore();
+}
+
+function updateSelectedCircleInspection(){
+  if(selectedReconstructionCircleIndex<0||!reconstructionCircles[selectedReconstructionCircleIndex]){
+    selectedCircleStat.textContent="—";
+    selectedCircleGeometry.textContent="—";
+    selectedDetailPoint.textContent="—";
+    selectedDetailValue.textContent="—";
+    return;
+  }
+  const c=reconstructionCircles[selectedReconstructionCircleIndex];
+  selectedCircleStat.textContent=`${selectedReconstructionCircleIndex+1}. / ${reconstructionCircles.length}`;
+  selectedCircleGeometry.textContent=`(${c.x.toFixed(1)}, ${c.y.toFixed(1)}), r = ${c.radius.toFixed(1)} px`;
+  if(selectedDetailMaximum){
+    selectedDetailPoint.textContent=`(${selectedDetailMaximum.x.toFixed(1)}, ${selectedDetailMaximum.y.toFixed(1)})`;
+    selectedDetailValue.textContent=selectedDetailMaximum.value.toFixed(3);
+  }else{
+    selectedDetailPoint.textContent="—";
+    selectedDetailValue.textContent="—";
+  }
+}
+
 function updateReconstructionStats(){
   reconstructionCategoryStat.textContent=imageCategoryInput.options[imageCategoryInput.selectedIndex].text;
   placedCircleCountBox.textContent=reconstructionCircles.length.toLocaleString();
+  saveReconstructionPdfButton.disabled=reconstructionCircles.length===0;
   if(!reconstructionCircles.length){minimumRadiusStat.textContent=maximumRadiusStat.textContent="—";return;}
-  const rs=reconstructionCircles.map(c=>c.radius);minimumRadiusStat.textContent=`${Math.min(...rs).toFixed(1)} px`;maximumRadiusStat.textContent=`${Math.max(...rs).toFixed(1)} px`;
+  let min=Infinity,max=0;
+  for(const c of reconstructionCircles){if(c.radius<min)min=c.radius;if(c.radius>max)max=c.radius;}
+  minimumRadiusStat.textContent=`${min.toFixed(1)} px`;maximumRadiusStat.textContent=`${max.toFixed(1)} px`;
+}
+function pdfEscape(s){return String(s).replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)").replace(/[^\x20-\x7E]/g,"?");}
+function circlePdfPath(cx,cy,r){
+  const k=.5522847498307936,kr=k*r;
+  return `${(cx+r).toFixed(3)} ${cy.toFixed(3)} m\n${(cx+r).toFixed(3)} ${(cy+kr).toFixed(3)} ${(cx+kr).toFixed(3)} ${(cy+r).toFixed(3)} ${cx.toFixed(3)} ${(cy+r).toFixed(3)} c\n${(cx-kr).toFixed(3)} ${(cy+r).toFixed(3)} ${(cx-r).toFixed(3)} ${(cy+kr).toFixed(3)} ${(cx-r).toFixed(3)} ${cy.toFixed(3)} c\n${(cx-r).toFixed(3)} ${(cy-kr).toFixed(3)} ${(cx-kr).toFixed(3)} ${(cy-r).toFixed(3)} ${cx.toFixed(3)} ${(cy-r).toFixed(3)} c\n${(cx+kr).toFixed(3)} ${(cy-r).toFixed(3)} ${(cx+r).toFixed(3)} ${(cy-kr).toFixed(3)} ${(cx+r).toFixed(3)} ${cy.toFixed(3)} c\n`;
+}
+function buildPdf(objects,rootId,infoId){
+  let out="%PDF-1.4\n%\xE2\xE3\xCF\xD3\n",offsets=[0];
+  for(let i=0;i<objects.length;i++){offsets.push(out.length);out+=`${i+1} 0 obj\n${objects[i]}\nendobj\n`;}
+  const xref=out.length;out+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n`;
+  for(let i=1;i<offsets.length;i++)out+=String(offsets[i]).padStart(10,"0")+" 00000 n \n";
+  out+=`trailer\n<< /Size ${objects.length+1} /Root ${rootId} 0 R /Info ${infoId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return new Blob([new TextEncoder().encode(out)],{type:"application/pdf"});
+}
+function saveReconstructionPdf(){
+  if(!sourceImage||!reconstructionCircles.length)return;
+  const limits=getPhysicalCircleLimits();if(!limits)return;
+  setStatus("Vektoros PDF készítése…");
+  setTimeout(()=>{
+    const ptPerMm=72/25.4;
+    const pageW=limits.widthMm*ptPerMm,pageH=limits.heightMm*ptPerMm;
+    const scale=Math.min(pageW/sourceImage.width,pageH/sourceImage.height);
+    const offsetX=(pageW-sourceImage.width*scale)/2,offsetY=(pageH-sourceImage.height*scale)/2;
+    let art=`1 1 1 rg\n0 0 ${pageW.toFixed(3)} ${pageH.toFixed(3)} re f\n`;
+    for(const c of reconstructionCircles){
+      const x=offsetX+c.x*scale,y=pageH-(offsetY+c.y*scale),r=c.radius*scale;
+      art+=`${(c.color.r/255).toFixed(4)} ${(c.color.g/255).toFixed(4)} ${(c.color.b/255).toFixed(4)} rg\n`;
+      art+=circlePdfPath(x,y,r)+"f\n";
+    }
+    const a4w=595.276,a4h=841.89;
+    const category=imageCategoryInput.options[imageCategoryInput.selectedIndex].text;
+    const date=new Date().toLocaleString("hu-HU");
+    const lines=[
+      "Picture Analyzer Lab V0.12/A",
+      `Forrasfajl: ${fileNameBox.textContent}`,
+      `Kategoria: ${category}`,
+      `Vegleges meret: ${finalWidthCmInput.value} x ${finalHeightCmInput.value} cm`,
+      `Korok szama: ${reconstructionCircles.length}`,
+      `Koratmero: ${minCircleDiameterMmInput.value} - ${maxCircleDiameterMmInput.value} mm`,
+      `Sobel suly: ${sobelWeightInput.value}%`,
+      `RGB szorodas suly: ${rgbSpreadWeightInput.value}%`,
+      `Racsmeret az elemzeshez: ${gridSizeInput.value} px`,
+      `Datum: ${date}`,
+      "Megjegyzes: a korok kozepontjai szabad pixelkoordinatak, nem cellakozepek."
+    ];
+    let info="BT\n/F1 16 Tf\n50 790 Td\n";
+    lines.forEach((line,i)=>{if(i===1)info+="/F1 11 Tf\n";if(i)info+="0 -28 Td\n";info+=`(${pdfEscape(line)}) Tj\n`;});
+    info+="ET\n";
+    const objects=[];
+    objects.push("<< /Type /Catalog /Pages 2 0 R >>");
+    objects.push("<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>");
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW.toFixed(3)} ${pageH.toFixed(3)}] /Resources << >> /Contents 4 0 R >>`);
+    objects.push(`<< /Length ${art.length} >>\nstream\n${art}endstream`);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${a4w} ${a4h}] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>`);
+    objects.push(`<< /Length ${info.length} >>\nstream\n${info}endstream`);
+    objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+    objects.push(`<< /Title (${pdfEscape("Picture Analyzer Lab V0.12/A")}) /Subject (${pdfEscape("Szabad kor-kozeppontu rekonstrukcio")}) /Creator (${pdfEscape("Picture Analyzer Lab")}) >>`);
+    const blob=buildPdf(objects,1,8);
+    const link=document.createElement("a");
+    link.href=URL.createObjectURL(blob);
+    const base=(fileNameBox.textContent||"korrekonstrukcio").replace(/\.[^.]+$/,"").replace(/[^\w.-]+/g,"_");
+    link.download=`${base}_Picture_Analyzer_V0.12A.pdf`;
+    document.body.appendChild(link);link.click();link.remove();
+    setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+    setStatus("A vektoros PDF elkészült és letöltődött.");
+  },0);
 }
 
 function drawMosaic() {
@@ -989,7 +1256,7 @@ function updateEdgeControlsVisibility() {
 function setStatus(text) {statusBox.textContent = text;}
 
 updateMetricDescription();
-updateEdgeControlsVisibility();clearRadiusStatistics();drawRadiusChart();updatePhysicalCircleInfo();updateReconstructionStats();
+updateEdgeControlsVisibility();clearRadiusStatistics();drawRadiusChart();updatePhysicalCircleInfo();updateReconstructionStats();updateSelectedCircleInspection();
 </script>
 </body>
 </html>

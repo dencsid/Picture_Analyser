@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.7 – Sobel élfolyosó</title>
+<title>Picture Analyzer Lab V0.8.1 – Nyers Sobel diagnosztika</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -23,12 +23,14 @@ input[type=range],select{width:100%}select{padding:8px 9px;border:1px solid #bbb
 .corridor-controls{margin-top:12px;padding-top:12px;border-top:1px solid #e5caca}.corridor-controls[hidden]{display:none}
 button{margin-top:14px;width:100%;border:0;border-radius:8px;padding:10px 12px;background:#555;color:#fff;cursor:pointer;font-weight:bold}button:hover{background:#3d3d3d}button:disabled{opacity:.45;cursor:default}
 @media(max-width:920px){main{grid-template-columns:1fr}}
+
+.radius-controls{margin-top:17px;padding:12px;border:1px solid #b9c9dc;border-radius:8px;background:#f6f9fd}.radius-controls[hidden]{display:none}.radius-controls h2{font-size:15px;margin:0 0 8px;color:#244f7a}.radius-stats{margin-top:12px;padding:9px;background:#fff;border:1px solid #d7e0ea;border-radius:7px;font-size:13px;line-height:1.55}.chart-wrap{margin-top:12px;background:#fff;border:1px solid #d7e0ea;border-radius:7px;padding:7px}#radiusChart{display:block;width:100%;height:150px;cursor:default}.inline-buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}.inline-buttons button{margin-top:10px}.small-note{font-size:12px;color:#555;line-height:1.35;margin-top:6px}
 </style>
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.7 – #13/B Élfolyosó</h1>
-  <p>Pixelszintű Sobel-élekből képzett, állítható szélességű valószínűségi élzóna.</p>
+  <h1>Picture Analyzer Lab V0.8.1 – Nyers Sobel diagnosztika</h1>
+  <p>A #14/B funkciói változatlanul megmaradtak; új diagnosztikai nézet mutatja a küszöb nélküli pixelszintű Sobel-erősséget.</p>
 </header>
 <main>
 <section class="panel">
@@ -41,9 +43,13 @@ button{margin-top:14px;width:100%;border:0;border-radius:8px;padding:10px 12px;b
       <option value="original">Eredeti kép</option>
       <option value="edgeOverlay">Eredeti kép + pixelszintű éltérkép</option>
       <option value="edgeOnly">Csak pixelszintű éltérkép</option>
+      <option value="rawSobel">Nyers Sobel-erősség (küszöb nélkül)</option>
       <option value="corridorOverlay">Eredeti kép + valószínűségi élfolyosó</option>
       <option value="corridorOnly">Csak valószínűségi élfolyosó</option>
       <option value="edgeCorridorOverlay">Eredeti kép + Sobel-élek + élfolyosó</option>
+      <option value="detailMap">Részletességi térkép + sugárvizsgálat</option>
+      <option value="detailOverlay">Eredeti kép + sugárvizsgálat</option>
+      <option value="firstCircle">Első javasolt kör az eredeti képen</option>
       <option value="mosaic">Átlagolt mozaik</option>
       <option value="rgbSpread">Színszórás-hőtérkép</option>
       <option value="maxColorDistance">Maximális színkülönbség</option>
@@ -79,6 +85,25 @@ button{margin-top:14px;width:100%;border:0;border-radius:8px;padding:10px 12px;b
       </div>
       <div class="row"><input id="splitCorridorSides" type="checkbox" checked><label for="splitCorridorSides">A két oldal eltérő jelölése</label></div>
     </div>
+  </div>
+
+  <div id="radiusControls" class="radius-controls" hidden>
+    <h2>#14/B – Sugárvizsgálat és első kör</h2>
+    <div class="control"><label for="detailGamma"><span>Részletkiemelés</span><span><span id="detailGammaValue">70</span>%</span></label><input id="detailGamma" type="range" min="20" max="200" step="5" value="70"></div>
+    <div class="control"><label for="darkCandidatePercent"><span>Sötét jelölt tartomány</span><span>alsó <span id="darkCandidatePercentValue">5</span>%</span></label><input id="darkCandidatePercent" type="range" min="1" max="30" step="1" value="5"></div>
+    <div class="control"><label for="maxTestRadius"><span>Legnagyobb vizsgált sugár</span><span><span id="maxTestRadiusValue">160</span> px</span></label><input id="maxTestRadius" type="range" min="10" max="500" step="2" value="160"></div>
+    <div class="control"><label for="radiusStep"><span>Sugárlépés</span><span><span id="radiusStepValue">2</span> px</span></label><input id="radiusStep" type="range" min="1" max="10" step="1" value="2"></div>
+    <div class="control"><label for="ringWidth"><span>Külső gyűrű vastagsága</span><span><span id="ringWidthValue">4</span> px</span></label><input id="ringWidth" type="range" min="1" max="20" step="1" value="4"></div>
+    <div class="control"><label for="ringThreshold"><span>Gyűrűátlag küszöbe</span><span id="ringThresholdValue">42</span></label><input id="ringThreshold" type="range" min="1" max="255" step="1" value="42"></div>
+    <div class="control"><label for="jumpThreshold"><span>Hirtelen emelkedés küszöbe</span><span id="jumpThresholdValue">12</span></label><input id="jumpThreshold" type="range" min="1" max="100" step="1" value="12"></div>
+    <div class="control"><label for="manualRadius"><span>Megjelenített sugár</span><span><span id="manualRadiusValue">20</span> px</span></label><input id="manualRadius" type="range" min="1" max="160" step="1" value="20"></div>
+    <div class="row"><input id="showSuggestedCircle" type="checkbox" checked><label for="showSuggestedCircle">Javasolt kör megjelenítése</label></div>
+    <div class="row"><input id="fillFirstCircle" type="checkbox" checked><label for="fillFirstCircle">Első kör kitöltése átlagos képszínnel</label></div>
+    <div class="inline-buttons"><button id="chooseDarkPoint" disabled>Sötét pont választása</button><button id="createFirstCircle" disabled>Első kör létrehozása</button></div>
+    <button id="clearRadiusTest" disabled>Vizsgálat törlése</button>
+    <div class="radius-stats"><div><strong>Középpont:</strong> <span id="testCenter">—</span></div><div><strong>Aktuális sugár:</strong> <span id="currentRadiusStat">—</span></div><div><strong>Körlap átlaga:</strong> <span id="diskAverage">—</span></div><div><strong>Külső gyűrű átlaga:</strong> <span id="ringAverage">—</span></div><div><strong>Javasolt sugár:</strong> <span id="suggestedRadius">—</span></div><div><strong>Megállás oka:</strong> <span id="stopReason">—</span></div><div><strong>Első kör színe:</strong> <span id="firstCircleColor">—</span></div></div>
+    <div class="chart-wrap"><canvas id="radiusChart" width="330" height="150"></canvas><div class="small-note">Folytonos: körlapátlag. Szaggatott: gyűrűátlag. Függőleges: javasolt sugár.</div></div>
+    <div class="small-note">A képre kattintva kézzel is kijelölhető a középpont.</div>
   </div>
 
   <div class="control">
@@ -155,6 +180,7 @@ const corridorHalfWidthValue = $("corridorHalfWidthValue");
 const corridorOpacityInput = $("corridorOpacity");
 const corridorOpacityValue = $("corridorOpacityValue");
 const splitCorridorSidesInput = $("splitCorridorSides");
+const radiusControls=$("radiusControls"),detailGammaInput=$("detailGamma"),detailGammaValue=$("detailGammaValue"),darkCandidatePercentInput=$("darkCandidatePercent"),darkCandidatePercentValue=$("darkCandidatePercentValue"),maxTestRadiusInput=$("maxTestRadius"),maxTestRadiusValue=$("maxTestRadiusValue"),radiusStepInput=$("radiusStep"),radiusStepValue=$("radiusStepValue"),ringWidthInput=$("ringWidth"),ringWidthValue=$("ringWidthValue"),ringThresholdInput=$("ringThreshold"),ringThresholdValue=$("ringThresholdValue"),jumpThresholdInput=$("jumpThreshold"),jumpThresholdValue=$("jumpThresholdValue"),manualRadiusInput=$("manualRadius"),manualRadiusValue=$("manualRadiusValue"),showSuggestedCircleInput=$("showSuggestedCircle"),fillFirstCircleInput=$("fillFirstCircle"),chooseDarkPointButton=$("chooseDarkPoint"),createFirstCircleButton=$("createFirstCircle"),clearRadiusTestButton=$("clearRadiusTest"),testCenterBox=$("testCenter"),currentRadiusStatBox=$("currentRadiusStat"),diskAverageBox=$("diskAverage"),ringAverageBox=$("ringAverage"),suggestedRadiusBox=$("suggestedRadius"),stopReasonBox=$("stopReason"),firstCircleColorBox=$("firstCircleColor"),radiusChart=$("radiusChart"),radiusChartCtx=radiusChart.getContext("2d");
 const edgeThresholdBox = $("edgeThreshold");
 const resetViewButton = $("resetView");
 const metricNote = $("metricNote");
@@ -166,6 +192,8 @@ const edgeCanvas = document.createElement("canvas");
 const edgeCtx = edgeCanvas.getContext("2d");
 const corridorCanvas = document.createElement("canvas");
 const corridorCtx = corridorCanvas.getContext("2d");
+const detailCanvas=document.createElement("canvas"),detailCtx=detailCanvas.getContext("2d");
+const rawSobelCanvas=document.createElement("canvas"),rawSobelCtx=rawSobelCanvas.getContext("2d");
 
 const statusBox = $("status");
 const fileNameBox = $("fileName");
@@ -193,14 +221,17 @@ let cachedDirections = null;
 let corridorCacheKey = "";
 let corridorDistance = null;
 let corridorNearestEdge = null;
+let detailData=null,radiusTest=null,firstCircle=null,rawSobelMaximum=0;
 
 const metricDescriptions = {
   original: "Az eredeti kép változtatás nélkül.",
   edgeOverlay: "A küszöb fölötti pixelszintű Sobel-élek vörös rétegként jelennek meg az eredeti képen.",
   edgeOnly: "A küszöb fölötti pixelszintű Sobel-élek fekete háttéren jelennek meg.",
+  rawSobel: "A pixelszintű Sobel-gradiens nyers nagysága küszöbölés nélkül, szürkeárnyalatos képként. Fekete = 0, fehér = a képen mért legnagyobb Sobel-érték.",
   corridorOverlay: "Az eredeti képen az él közelében erős, attól távolodva gyengülő valószínűségi élfolyosó jelenik meg.",
   corridorOnly: "Csak a valószínűségi élfolyosó jelenik meg fekete háttéren.",
   edgeCorridorOverlay: "Az eredeti képen együtt látható a Sobel-éltérkép és az abból képzett valószínűségi élfolyosó.",
+  detailMap:"Szürkeárnyalatos részletességi térkép: fekete = kevés részlet, fehér = erős részlet.",detailOverlay:"Az eredeti kép fölött látható a sugárvizsgálat.",firstCircle:"Az első automatikusan javasolt kör az eredeti képen.",
   mosaic: "Minden cella a benne található pixelek átlagos RGB-színét kapja.",
   rgbSpread: "A három RGB-csatorna szórásának együttes értéke.",
   maxColorDistance: "A cella egymástól legtávolabbi jellegzetes színei közötti RGB-távolság becslése.",
@@ -222,7 +253,7 @@ imageInput.addEventListener("change", async () => {
     edgeCanvas.width = bitmap.width;
     edgeCanvas.height = bitmap.height;
     corridorCanvas.width = bitmap.width;
-    corridorCanvas.height = bitmap.height;
+    corridorCanvas.height = bitmap.height;detailCanvas.width=bitmap.width;detailCanvas.height=bitmap.height;rawSobelCanvas.width=bitmap.width;rawSobelCanvas.height=bitmap.height;
     sourceCtx.clearRect(0, 0, bitmap.width, bitmap.height);
     sourceCtx.drawImage(bitmap, 0, 0);
     sourceImageData = sourceCtx.getImageData(0, 0, bitmap.width, bitmap.height);
@@ -230,7 +261,7 @@ imageInput.addEventListener("change", async () => {
     canvas.height = bitmap.height;
     fileNameBox.textContent = file.name;
     imageSizeBox.textContent = `${bitmap.width} × ${bitmap.height} px`;
-    resetViewButton.disabled = false;
+    resetViewButton.disabled=false;chooseDarkPointButton.disabled=false;createFirstCircleButton.disabled=false;clearRadiusTestButton.disabled=false;
     prepareDerivedImages();
     analyzeAndDraw();
   } catch (error) {
@@ -279,6 +310,11 @@ corridorOpacityInput.addEventListener("input", () => {
   scheduleDraw();
 });
 splitCorridorSidesInput.addEventListener("change", scheduleDraw);
+[detailGammaInput,darkCandidatePercentInput,maxTestRadiusInput,radiusStepInput,ringWidthInput,ringThresholdInput,jumpThresholdInput,manualRadiusInput].forEach(el=>el.addEventListener("input",()=>{detailGammaValue.textContent=detailGammaInput.value;darkCandidatePercentValue.textContent=darkCandidatePercentInput.value;maxTestRadiusValue.textContent=maxTestRadiusInput.value;radiusStepValue.textContent=radiusStepInput.value;ringWidthValue.textContent=ringWidthInput.value;ringThresholdValue.textContent=ringThresholdInput.value;jumpThresholdValue.textContent=jumpThresholdInput.value;manualRadiusValue.textContent=manualRadiusInput.value;manualRadiusInput.max=maxTestRadiusInput.value;if(el===detailGammaInput)buildDetailMap();if(radiusTest&&el!==manualRadiusInput)analyzeRadiusAt(radiusTest.x,radiusTest.y);else{updateRadiusStatistics();scheduleDraw();}}));
+showSuggestedCircleInput.addEventListener("change",scheduleDraw);fillFirstCircleInput.addEventListener("change",scheduleDraw);
+chooseDarkPointButton.addEventListener("click",chooseAutomaticDarkPoint);
+createFirstCircleButton.addEventListener("click",()=>{if(!radiusTest)chooseAutomaticDarkPoint();if(!radiusTest)return;firstCircle={x:radiusTest.x,y:radiusTest.y,radius:radiusTest.suggestedRadius,color:averageSourceColor(radiusTest.x,radiusTest.y,radiusTest.suggestedRadius)};firstCircleColorBox.textContent=`rgb(${firstCircle.color.r}, ${firstCircle.color.g}, ${firstCircle.color.b})`;displayModeInput.value="firstCircle";updateMetricDescription();updateEdgeControlsVisibility();scheduleDraw();});
+clearRadiusTestButton.addEventListener("click",()=>{radiusTest=firstCircle=null;clearRadiusStatistics();drawRadiusChart();scheduleDraw();});
 resetViewButton.addEventListener("click", () => {
   displayModeInput.value = "original";
   gridSizeInput.value = 32;
@@ -300,6 +336,7 @@ resetViewButton.addEventListener("click", () => {
   analyzeAndDraw();
 });
 
+canvas.addEventListener("click",event=>{if(!sourceImage||!["detailMap","detailOverlay","firstCircle"].includes(displayModeInput.value))return;const r=canvas.getBoundingClientRect(),x=Math.floor((event.clientX-r.left)*canvas.width/r.width),y=Math.floor((event.clientY-r.top)*canvas.height/r.height);analyzeRadiusAt(x,y);});
 canvas.addEventListener("mousemove", event => {
   if (!sourceImage || analysis.cells.length === 0) return;
   const rect = canvas.getBoundingClientRect();
@@ -346,6 +383,12 @@ function prepareDerivedImages() {
       sobelData[index] = Math.hypot(gx, gy) / 4;
     }
   }
+  rawSobelMaximum = 0;
+  for (const value of sobelData) {
+    if (value > rawSobelMaximum) rawSobelMaximum = value;
+  }
+  renderRawSobelCanvas();
+  buildDetailMap();
 }
 
 function analyzeAndDraw() {
@@ -378,7 +421,7 @@ function analyzeAndDraw() {
     }
     updateGridStatistics();
     draw();
-    setStatus("Az elemzés és a pixelszintű Sobel-éltérkép elkészült.");
+    setStatus("Az elemzés, a küszöbölt éltérkép és a nyers Sobel-diagnosztika elkészült.");
   }, 0);
 }
 
@@ -473,6 +516,8 @@ function draw() {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     renderEdgeCanvas(true);
     ctx.drawImage(edgeCanvas, 0, 0);
+  } else if (mode === "rawSobel") {
+    ctx.drawImage(rawSobelCanvas, 0, 0);
   } else if (mode === "corridorOverlay") {
     ctx.drawImage(sourceImage, 0, 0);
     renderCorridorCanvas();
@@ -488,7 +533,10 @@ function draw() {
     ctx.drawImage(corridorCanvas, 0, 0);
     renderEdgeCanvas(false);
     ctx.drawImage(edgeCanvas, 0, 0);
-  } else if (mode === "mosaic") {
+  } else if(mode==="detailMap"){renderDetailCanvas();ctx.drawImage(detailCanvas,0,0);drawRadiusInspection();}
+  else if(mode==="detailOverlay"){ctx.drawImage(sourceImage,0,0);drawRadiusInspection();}
+  else if(mode==="firstCircle"){ctx.drawImage(sourceImage,0,0);drawFirstCircle();drawRadiusInspection();}
+  else if (mode === "mosaic") {
     drawMosaic();
   } else {
     drawMetricHeatmap(mode);
@@ -496,6 +544,24 @@ function draw() {
   if (showGridInput.checked || mode === "originalGrid") drawGrid(Number(gridSizeInput.value));
   updateMetricMaximum();
   updateEdgeThreshold();
+}
+
+function renderRawSobelCanvas() {
+  if (!sourceImageData || !sobelData) return;
+  const width = sourceImageData.width;
+  const height = sourceImageData.height;
+  const output = rawSobelCtx.createImageData(width, height);
+  const pixels = output.data;
+  const maximum = Math.max(1e-9, rawSobelMaximum);
+
+  for (let p = 0, i = 0; p < sobelData.length; p++, i += 4) {
+    const gray = Math.round(255 * Math.min(1, sobelData[p] / maximum));
+    pixels[i] = gray;
+    pixels[i + 1] = gray;
+    pixels[i + 2] = gray;
+    pixels[i + 3] = 255;
+  }
+  rawSobelCtx.putImageData(output, 0, 0);
 }
 
 function getEdgeThreshold() {
@@ -617,6 +683,20 @@ function renderCorridorCanvas() {
   corridorCtx.putImageData(output, 0, 0);
 }
 
+
+function buildDetailMap(){if(!sobelData)return;let m=0;for(const v of sobelData)if(v>m)m=v;const g=Number(detailGammaInput.value)/100;detailData=new Uint8ClampedArray(sobelData.length);for(let i=0;i<sobelData.length;i++)detailData[i]=Math.round(255*Math.pow(Math.min(1,sobelData[i]/Math.max(1,m)),g));}
+function renderDetailCanvas(){buildDetailMap();const o=detailCtx.createImageData(sourceImageData.width,sourceImageData.height);for(let p=0,i=0;p<detailData.length;p++,i+=4)o.data[i]=o.data[i+1]=o.data[i+2]=detailData[p],o.data[i+3]=255;detailCtx.putImageData(o,0,0);}
+function chooseAutomaticDarkPoint(){if(!detailData)return;const w=sourceImageData.width,h=sourceImageData.height,hist=new Uint32Array(256);for(const v of detailData)hist[v]++;let target=detailData.length*Number(darkCandidatePercentInput.value)/100,sum=0,cut=0;for(;cut<256;cut++){sum+=hist[cut];if(sum>=target)break}const a=[];for(let i=0;i<detailData.length;i++)if(detailData[i]<=cut)a.push(i);const k=a[Math.floor(Math.random()*a.length)];analyzeRadiusAt(k%w,Math.floor(k/w));}
+function detailStats(cx,cy,r,rw){const w=sourceImageData.width,h=sourceImageData.height,r2=r*r,i2=Math.max(0,r-rw)**2;let ds=0,dc=0,rs=0,rc=0;for(let y=Math.max(0,cy-r);y<=Math.min(h-1,cy+r);y++)for(let x=Math.max(0,cx-r);x<=Math.min(w-1,cx+r);x++){const d=(x-cx)**2+(y-cy)**2;if(d<=r2){const v=detailData[y*w+x];ds+=v;dc++;if(d>=i2){rs+=v;rc++}}}return{diskAverage:ds/dc,ringAverage:rs/Math.max(1,rc)}}
+function analyzeRadiusAt(cx,cy){if(!detailData)return;const w=sourceImageData.width,h=sourceImageData.height,max=Math.max(1,Math.min(Number(maxTestRadiusInput.value),cx,cy,w-1-cx,h-1-cy)),step=Number(radiusStepInput.value),rw=Number(ringWidthInput.value),rt=Number(ringThresholdInput.value),jt=Number(jumpThresholdInput.value),samples=[];let sug=max,reason=max<Number(maxTestRadiusInput.value)?"képszél":"maximális sugár",prev=null;for(let r=step;r<=max;r+=step){const q=detailStats(cx,cy,r,rw);samples.push({radius:r,...q});if(q.ringAverage>=rt){sug=Math.max(1,r-step);reason="gyűrűátlag elérte a küszöböt";break}if(prev!==null&&q.ringAverage-prev>=jt){sug=Math.max(1,r-step);reason="gyűrűátlag hirtelen nőtt";break}prev=q.ringAverage}radiusTest={x:cx,y:cy,samples,suggestedRadius:sug,stopReason:reason};manualRadiusInput.max=max;manualRadiusInput.value=Math.min(Number(manualRadiusInput.value),max);manualRadiusValue.textContent=manualRadiusInput.value;firstCircle=null;updateRadiusStatistics();drawRadiusChart();scheduleDraw();}
+function sampleAt(r){if(!radiusTest)return null;return radiusTest.samples.reduce((a,b)=>Math.abs(b.radius-r)<Math.abs(a.radius-r)?b:a,radiusTest.samples[0]);}
+function updateRadiusStatistics(){if(!radiusTest)return clearRadiusStatistics();const r=Number(manualRadiusInput.value),q=sampleAt(r);testCenterBox.textContent=`(${radiusTest.x}, ${radiusTest.y})`;currentRadiusStatBox.textContent=`${r} px`;diskAverageBox.textContent=q.diskAverage.toFixed(2);ringAverageBox.textContent=q.ringAverage.toFixed(2);suggestedRadiusBox.textContent=`${radiusTest.suggestedRadius} px`;stopReasonBox.textContent=radiusTest.stopReason;}
+function clearRadiusStatistics(){[testCenterBox,currentRadiusStatBox,diskAverageBox,ringAverageBox,suggestedRadiusBox,stopReasonBox,firstCircleColorBox].forEach(e=>e.textContent="—");}
+function drawRadiusInspection(){if(!radiusTest)return;ctx.save();ctx.lineWidth=2;ctx.setLineDash([7,5]);ctx.strokeStyle="yellow";ctx.beginPath();ctx.arc(radiusTest.x,radiusTest.y,Number(manualRadiusInput.value),0,Math.PI*2);ctx.stroke();if(showSuggestedCircleInput.checked){ctx.setLineDash([]);ctx.strokeStyle="cyan";ctx.beginPath();ctx.arc(radiusTest.x,radiusTest.y,radiusTest.suggestedRadius,0,Math.PI*2);ctx.stroke()}ctx.fillStyle="white";ctx.strokeStyle="black";ctx.beginPath();ctx.arc(radiusTest.x,radiusTest.y,4,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.restore();}
+function averageSourceColor(cx,cy,r){const d=sourceImageData.data,w=sourceImageData.width,h=sourceImageData.height,r2=r*r;let R=0,G=0,B=0,n=0;for(let y=Math.max(0,cy-r);y<=Math.min(h-1,cy+r);y++)for(let x=Math.max(0,cx-r);x<=Math.min(w-1,cx+r);x++)if((x-cx)**2+(y-cy)**2<=r2){let i=(y*w+x)*4;R+=d[i];G+=d[i+1];B+=d[i+2];n++}return{r:Math.round(R/n),g:Math.round(G/n),b:Math.round(B/n)}}
+function drawFirstCircle(){if(!firstCircle)return;ctx.save();if(fillFirstCircleInput.checked){ctx.fillStyle=`rgb(${firstCircle.color.r},${firstCircle.color.g},${firstCircle.color.b})`;ctx.beginPath();ctx.arc(firstCircle.x,firstCircle.y,firstCircle.radius,0,Math.PI*2);ctx.fill()}ctx.strokeStyle="black";ctx.lineWidth=Math.max(1.5,firstCircle.radius*.035);ctx.beginPath();ctx.arc(firstCircle.x,firstCircle.y,firstCircle.radius,0,Math.PI*2);ctx.stroke();ctx.restore();}
+function drawRadiusChart(){const c=radiusChartCtx,w=radiusChart.width,h=radiusChart.height;c.clearRect(0,0,w,h);c.fillStyle="white";c.fillRect(0,0,w,h);c.strokeStyle="#bbb";c.strokeRect(.5,.5,w-1,h-1);if(!radiusTest||!radiusTest.samples.length)return;const a=radiusTest.samples,mr=Math.max(...a.map(s=>s.radius)),mv=Math.max(Number(ringThresholdInput.value),...a.map(s=>Math.max(s.diskAverage,s.ringAverage))),X=r=>32+r/mr*(w-40),Y=v=>h-22-v/mv*(h-30);c.strokeStyle="#222";c.setLineDash([]);c.beginPath();a.forEach((s,i)=>i?c.lineTo(X(s.radius),Y(s.diskAverage)):c.moveTo(X(s.radius),Y(s.diskAverage)));c.stroke();c.strokeStyle="#666";c.setLineDash([5,4]);c.beginPath();a.forEach((s,i)=>i?c.lineTo(X(s.radius),Y(s.ringAverage)):c.moveTo(X(s.radius),Y(s.ringAverage)));c.stroke();c.setLineDash([]);c.strokeStyle="#000";c.beginPath();c.moveTo(X(radiusTest.suggestedRadius),8);c.lineTo(X(radiusTest.suggestedRadius),h-22);c.stroke();}
+
 function drawMosaic() {
   const gridSize = Number(gridSizeInput.value);
   for (const cell of analysis.cells) {
@@ -693,7 +773,8 @@ function updateGridStatistics() {
 }
 function updateMetricMaximum() {
   const mode = displayModeInput.value;
-  if (mode in analysis.maxima) metricMaximumBox.textContent = `${analysis.maxima[mode].toFixed(3)}${mode === "entropy" ? " bit" : ""}`;
+  if (mode === "rawSobel") metricMaximumBox.textContent = rawSobelMaximum ? rawSobelMaximum.toFixed(3) : "—";
+  else if (mode in analysis.maxima) metricMaximumBox.textContent = `${analysis.maxima[mode].toFixed(3)}${mode === "entropy" ? " bit" : ""}`;
   else metricMaximumBox.textContent = "—";
 }
 function updateEdgeThreshold() {
@@ -706,12 +787,12 @@ function updateEdgeControlsVisibility() {
   const edgeModes = ["edgeOverlay","edgeOnly","corridorOverlay","corridorOnly","edgeCorridorOverlay"];
   const corridorModes = ["corridorOverlay","corridorOnly","edgeCorridorOverlay"];
   edgeControls.hidden = !edgeModes.includes(mode);
-  corridorControls.hidden = !corridorModes.includes(mode);
+  corridorControls.hidden = !corridorModes.includes(mode);radiusControls.hidden=!["detailMap","detailOverlay","firstCircle"].includes(mode);
 }
 function setStatus(text) {statusBox.textContent = text;}
 
 updateMetricDescription();
-updateEdgeControlsVisibility();
+updateEdgeControlsVisibility();clearRadiusStatistics();drawRadiusChart();
 </script>
 </body>
 </html>

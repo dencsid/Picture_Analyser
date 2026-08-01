@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.14/A – javított folytatás és változó élkörméret</title>
+<title>Picture Analyzer Lab V0.14/B – működő folytatás, változó élkörméret</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -280,8 +280,8 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.14/A – javított folytatás és változó élkörméret</h1>
-  <p>Első fázis: változó méretű, érintkező körláncok az élek két oldalán. A generálás megállítható és új paraméterekkel folytatható.</p>
+  <h1>Picture Analyzer Lab V0.14/B – működő folytatás, változó élkörméret</h1>
+  <p>Első fázis: változó méretű érintkező körláncok. Javított indítás, gyorsabb élpontlista, működő megállítás és folytatás.</p>
 </header>
 <main>
 <section class="panel">
@@ -1258,7 +1258,11 @@ function buildEdgePriorityCandidates(){
     A legerősebb élpontokat ritkított mintavétellel gyűjtjük össze.
     A pontokhoz eltároljuk az él normálisát és érintőirányát is.
   */
-  const stride=Math.max(1,Math.floor(Math.min(width,height)/1400));
+  const targetSampleCount=750000;
+  const stride=Math.max(
+    1,
+    Math.ceil(Math.sqrt((width*height)/targetSampleCount))
+  );
 
   for(let y=1;y<height-1;y+=stride){
     for(let x=1;x<width-1;x+=stride){
@@ -1398,8 +1402,12 @@ function tryAttachEdgeCircle(state,candidate){
     Az új kör a szülőt pontosan érinti, és lehetőleg az él érintője
     mentén folytatja a láncot.
   */
-  const nearby=nearbyEdgeCircles(state,candidate.x,candidate.y,radius)
-    .filter(circle=>circle.phase===1);
+  const nearby=nearbyEdgeCircles(
+    state,
+    candidate.x,
+    candidate.y,
+    targetRadius
+  ).filter(circle=>circle.phase===1);
 
   for(const parent of nearby){
     const radius=smoothAttachedRadius(parent.radius,targetRadius,state);
@@ -1477,6 +1485,7 @@ function initializeEdgeNetworkGeneration(){
   if(!limits)return null;
 
   const requested=Number(reconstructionCircleCountInput.value);
+  setStatus("Élpontok prioritási listájának összeállítása…");
   const candidates=buildEdgePriorityCandidates();
 
   /*
@@ -1566,8 +1575,9 @@ function runEdgeNetworkGeneration(){
 
     const now=performance.now();
     const shouldRefresh=
-      now-state.lastVisualUpdate>=250||
-      reconstructionCircles.length-state.lastVisualCircleCount>=250;
+      reconstructionCircles.length<=40||
+      now-state.lastVisualUpdate>=300||
+      reconstructionCircles.length-state.lastVisualCircleCount>=300;
 
     if(shouldRefresh){
       state.lastVisualUpdate=now;
@@ -1653,6 +1663,16 @@ function generatePartialReconstruction(){
   }
 
   rebuildEdgeSpatialBuckets(edgeNetworkState);
+
+  if(!edgeNetworkState.candidates.length){
+    edgeNetworkState.finished=false;
+    edgeNetworkState.paused=true;
+    continueEdgeGenerationButton.disabled=false;
+    updateEdgeNetworkStatus(edgeNetworkState,"nincs élpont");
+    setStatus("Az aktuális élérzékenységgel nem találtam feldolgozható élpontot. Állíts az élérzékenységen, majd nyomd meg a Folytatás gombot.");
+    return;
+  }
+
   runEdgeNetworkGeneration();
 }
 
@@ -1690,6 +1710,7 @@ function continueEdgeNetworkGeneration(){
     Új menet készül az aktuális beállításokkal, de a körhálózat
     és minden már elkészült kör változatlanul megmarad.
   */
+  setStatus("Folytatás: új élprioritási lista készítése az aktuális paraméterekkel…");
   state.candidates=buildEdgePriorityCandidates();
   state.candidateIndex=0;
   state.passNumber=(state.passNumber||1)+1;
@@ -1715,6 +1736,16 @@ function continueEdgeNetworkGeneration(){
   state.lastVisualCircleCount=reconstructionCircles.length;
 
   rebuildEdgeSpatialBuckets(state);
+
+  if(!state.candidates.length){
+    state.finished=false;
+    state.paused=true;
+    continueEdgeGenerationButton.disabled=false;
+    updateEdgeNetworkStatus(state,"nincs élpont");
+    setStatus("Az aktuális paraméterekkel nem találtam új élpontot. A meglévő körhálózat megmaradt; módosítsd az élérzékenységet vagy a méreteket, majd folytasd.");
+    return;
+  }
+
   continueEdgeGenerationButton.disabled=true;
   runEdgeNetworkGeneration();
 }

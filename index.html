@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.14 – élvezérelt, megszakítható körhálózat</title>
+<title>Picture Analyzer Lab V0.14/A – folytatható, változó méretű élhálózat</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -280,8 +280,8 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.14 – élvezérelt, megszakítható körhálózat</h1>
-  <p>Új első fázis: kis, érintkező körláncok a legerősebb élek két oldalán. A generálás megállítható és folytatható.</p>
+  <h1>Picture Analyzer Lab V0.14/A – folytatható, változó méretű élhálózat</h1>
+  <p>Első fázis: változó méretű, érintkező körláncok az élek két oldalán. A generálás megállítható, új paraméterekkel folytatható.</p>
 </header>
 <main>
 <section class="panel">
@@ -412,9 +412,9 @@ button {
       <input id="maxCircleDiameterMm" type="range" min="5" max="400" step="5" value="80">
     </div>
     <div class="control">
-      <label for="reconstructionCircleCount"><span>Maximális körszám</span><span id="reconstructionCircleCountValue">1000</span></label>
+      <label for="reconstructionCircleCount"><span>Körlimit</span><span id="reconstructionCircleCountValue">1000</span></label>
       <input id="reconstructionCircleCount" type="range" min="100" max="50000" step="100" value="1000">
-      <div class="metric-note">A generálás korábban is megállhat, ha a minimális körmérettel már nem található több szabad hely.</div>
+      <div class="metric-note">Felső korlát a ténylegesen elhelyezett körök számára. Ha egy élbejárás elfogy, a Folytatás új menetet indít a meglévő hálózatból.</div>
     </div>
     <div class="control">
       <label for="circleLayerOpacity"><span>Körréteg átlátszatlansága</span><span><span id="circleLayerOpacityValue">70</span>%</span></label>
@@ -1210,6 +1210,29 @@ function normalizedEdgeStrengthAtIndex(index){
   return Math.max(0,Math.min(1,(sobelData[index]||0)/Math.max(1e-9,rawSobelMaximum)));
 }
 
+function edgeRadiusForCandidate(state,candidate){
+  /*
+    Erős, éles határnál kisebb kör szükséges.
+    Gyengébb, lágyabb él mentén nagyobb kör is megengedhető.
+    A változás korlátozott és simított, hogy a lánc ne legyen rángatózó.
+  */
+  const strength=Math.max(0,Math.min(1,candidate.strength));
+  const detail=Math.max(0,Math.min(1,candidate.combined));
+  const importance=.72*strength+.28*detail;
+
+  const minimum=state.minEdgeRadius;
+  const maximum=state.maxAllowedEdgeRadius;
+  const desired=minimum+(maximum-minimum)*Math.pow(1-importance,1.35);
+
+  return Math.max(minimum,Math.min(maximum,desired));
+}
+
+function smoothChildRadius(parentRadius,targetRadius,minRadius,maxRadius){
+  const lower=Math.max(minRadius,parentRadius*.72);
+  const upper=Math.min(maxRadius,parentRadius*1.28);
+  return Math.max(lower,Math.min(upper,targetRadius));
+}
+
 function buildEdgePriorityCandidates(){
   const width=sourceImage.width;
   const height=sourceImage.height;
@@ -1311,7 +1334,7 @@ function edgeSideColor(candidate,side,radius){
 }
 
 function createEdgeSeedPair(state,candidate){
-  const radius=state.currentEdgeRadius;
+  const radius=edgeRadiusForCandidate(state,candidate);
   const offset=radius;
   const created=[];
 
@@ -1352,7 +1375,7 @@ function createEdgeSeedPair(state,candidate){
 }
 
 function tryAttachEdgeCircle(state,candidate){
-  const radius=state.currentEdgeRadius;
+  const targetRadius=edgeRadiusForCandidate(state,candidate);
   let best=null;
 
   /*
@@ -1364,6 +1387,12 @@ function tryAttachEdgeCircle(state,candidate){
     .filter(circle=>circle.phase===1);
 
   for(const parent of nearby){
+    const radius=smoothChildRadius(
+      parent.radius,
+      targetRadius,
+      state.minEdgeRadius,
+      state.maxAllowedEdgeRadius
+    );
     const towardX=candidate.x-parent.x;
     const towardY=candidate.y-parent.y;
     const towardLength=Math.hypot(towardX,towardY);
@@ -1387,7 +1416,7 @@ function tryAttachEdgeCircle(state,candidate){
       const score=candidate.priority*2+tangentAlignment-edgeDistance/Math.max(1,radius*6);
 
       if(!best||score>best.score){
-        best={x,y,parent,side,score};
+        best={x,y,parent,side,score,radius};
       }
     }
   }
@@ -1398,8 +1427,8 @@ function tryAttachEdgeCircle(state,candidate){
     id:state.nextCircleId++,
     x:best.x,
     y:best.y,
-    radius,
-    color:edgeSideColor(candidate,best.side,radius),
+    radius:best.radius,
+    color:edgeSideColor(candidate,best.side,best.radius),
     detail:candidate.priority,
     phase:1,
     edgeSide:best.side,
@@ -1441,12 +1470,15 @@ function initializeEdgeNetworkGeneration(){
   const candidates=buildEdgePriorityCandidates();
 
   /*
-    Az első fázis kis körökkel dolgozik.
-    A minimális fizikai sugár az alap; legfeljebb annak 1.35-szöröse.
+    Az élkörök sugara a helyi él-erősségtől függ.
+    Erős él: közel a fizikai minimumhoz.
+    Gyengébb él: legfeljebb a minimum 2,6-szorosa,
+    de soha nem nagyobb a beállított fizikai maximumnál.
   */
-  const edgeRadius=Math.min(
+  const minEdgeRadius=limits.minRadius;
+  const maxAllowedEdgeRadius=Math.min(
     limits.maxRadius,
-    Math.max(limits.minRadius,limits.minRadius*1.15)
+    Math.max(minEdgeRadius,minEdgeRadius*2.6)
   );
 
   const state={
@@ -1456,14 +1488,18 @@ function initializeEdgeNetworkGeneration(){
     requested,
     candidates,
     candidateIndex:0,
-    currentEdgeRadius:edgeRadius,
-    maxEdgeRadius:edgeRadius,
-    bucketSize:Math.max(8,edgeRadius*4),
+    minEdgeRadius,
+    maxAllowedEdgeRadius,
+    maxEdgeRadius:maxAllowedEdgeRadius,
+    bucketSize:Math.max(8,maxAllowedEdgeRadius*4),
     buckets:new Map(),
     nextCircleId:1,
     nextComponentId:1,
-    seedSpacing:Math.max(edgeRadius*5,Number(gridSizeInput.value)*.8),
-    lastSeedCandidate:null
+    seedSpacing:Math.max(minEdgeRadius*5,Number(gridSizeInput.value)*.8),
+    lastSeedCandidate:null,
+    lastVisualUpdate:0,
+    lastVisualCircleCount:0,
+    passNumber:1
   };
 
   return state;
@@ -1495,7 +1531,7 @@ function runEdgeNetworkGeneration(){
       state.running&&
       reconstructionCircles.length<state.requested&&
       state.candidateIndex<state.candidates.length&&
-      performance.now()-chunkStart<28
+      performance.now()-chunkStart<45
     ){
       const candidate=state.candidates[state.candidateIndex++];
       if(candidate.used)continue;
@@ -1519,16 +1555,26 @@ function runEdgeNetworkGeneration(){
       }
     }
 
-    updateReconstructionStats();
-    updateEdgeNetworkStatus(state,state.running?"fut":"szünetel");
-    draw();
+    const now=performance.now();
+    const shouldUpdate=
+      now-state.lastVisualUpdate>=240||
+      reconstructionCircles.length-state.lastVisualCircleCount>=300||
+      !state.running;
 
-    setStatus(
-      `Élvezérelt körhálózat: `+
-      `${reconstructionCircles.length.toLocaleString()} / `+
-      `${state.requested.toLocaleString()} kör; `+
-      `${state.candidateIndex.toLocaleString()} élpont megvizsgálva.`
-    );
+    if(shouldUpdate){
+      state.lastVisualUpdate=now;
+      state.lastVisualCircleCount=reconstructionCircles.length;
+      updateReconstructionStats();
+      updateEdgeNetworkStatus(state,state.running?"fut":"szünetel");
+      draw();
+
+      setStatus(
+        `Élvezérelt körhálózat – ${state.passNumber}. menet: `+
+        `${reconstructionCircles.length.toLocaleString()} / `+
+        `${state.requested.toLocaleString()} kör; `+
+        `${state.candidateIndex.toLocaleString()} élpont megvizsgálva.`
+      );
+    }
 
     if(
       state.running&&
@@ -1541,18 +1587,17 @@ function runEdgeNetworkGeneration(){
 
     state.running=false;
 
-    if(
-      reconstructionCircles.length>=state.requested||
-      state.candidateIndex>=state.candidates.length
-    ){
-      state.finished=true;
-      updateEdgeNetworkStatus(state,"befejeződött");
-      continueEdgeGenerationButton.disabled=true;
-    }else{
-      state.paused=true;
-      updateEdgeNetworkStatus(state,"szünetel");
-      continueEdgeGenerationButton.disabled=false;
-    }
+    const reachedLimit=reconstructionCircles.length>=state.requested;
+    state.finished=reachedLimit;
+    state.paused=!reachedLimit;
+
+    updateReconstructionStats();
+    draw();
+
+    updateEdgeNetworkStatus(
+      state,
+      reachedLimit?"körlimit elérve":"folytatható"
+    );
 
     generateReconstructionButton.disabled=false;
     pauseEdgeGenerationButton.disabled=true;
@@ -1560,14 +1605,21 @@ function runEdgeNetworkGeneration(){
     saveReconstructionPdfButton.disabled=reconstructionCircles.length===0;
     startAutomaticInnerPhaseButton.disabled=reconstructionCircles.length===0;
 
-    const reason=reconstructionCircles.length>=state.requested
-      ?"a kért körszám elérve"
+    /*
+      Ha csak a jelenlegi élprioritási lista fogyott el, a Folytatás
+      aktív marad. A következő menet új listát készít az aktuális
+      paraméterekkel, miközben a meglévő körhálózat megmarad.
+    */
+    continueEdgeGenerationButton.disabled=reachedLimit;
+
+    const reason=reachedLimit
+      ?"a beállított körlimit elérve"
       :state.candidateIndex>=state.candidates.length
-        ?"az élprioritási lista elfogyott"
-        :"megállítva";
+        ?"az aktuális élprioritási lista elfogyott; Folytatás indítható"
+        :"megállítva; Folytatás indítható";
 
     setStatus(
-      `Az első fázis ${state.finished?"befejeződött":"szünetel"}: `+
+      `Az első fázis ${reachedLimit?"befejeződött":"folytatható"}: `+
       `${reconstructionCircles.length.toLocaleString()} kör; ${reason}.`
     );
   };
@@ -1601,6 +1653,7 @@ function pauseEdgeNetworkGeneration(){
   if(!edgeNetworkState||!edgeNetworkState.running)return;
   edgeNetworkState.running=false;
   edgeNetworkState.paused=true;
+  edgeNetworkState.finished=false;
   pauseEdgeGenerationButton.disabled=true;
   continueEdgeGenerationButton.disabled=false;
   clearReconstructionButton.disabled=false;
@@ -1610,28 +1663,75 @@ function pauseEdgeNetworkGeneration(){
 }
 
 function continueEdgeNetworkGeneration(){
-  if(!edgeNetworkState||edgeNetworkState.finished)return;
+  if(!edgeNetworkState||edgeNetworkState.running)return;
 
-  /*
-    Folytatáskor az új fizikai minimális körméretet és az új célkörszámot
-    használjuk, de a meglévő körhálózatot nem töröljük.
-  */
   const limits=getPhysicalCircleLimits();
   if(!limits)return;
 
-  edgeNetworkState.requested=Number(reconstructionCircleCountInput.value);
-  edgeNetworkState.currentEdgeRadius=Math.min(
-    limits.maxRadius,
-    Math.max(limits.minRadius,limits.minRadius*1.15)
-  );
-  edgeNetworkState.maxEdgeRadius=Math.max(
-    edgeNetworkState.maxEdgeRadius,
-    edgeNetworkState.currentEdgeRadius
-  );
-  edgeNetworkState.bucketSize=Math.max(8,edgeNetworkState.currentEdgeRadius*4);
-  rebuildEdgeSpatialBuckets(edgeNetworkState);
+  const state=edgeNetworkState;
+  state.requested=Number(reconstructionCircleCountInput.value);
 
-  edgeNetworkState.finished=false;
+  if(reconstructionCircles.length>=state.requested){
+    state.finished=true;
+    continueEdgeGenerationButton.disabled=true;
+    updateEdgeNetworkStatus(state,"körlimit elérve");
+    setStatus("A meglévő körök száma már elérte a beállított körlimitet. Emeld meg a körlimitet a folytatáshoz.");
+    return;
+  }
+
+  /*
+    Új menet az aktuális beállításokkal:
+    - új élérzékenység,
+    - új Sobel/RGB súlyok,
+    - új fizikai körméretek,
+    - a meglévő körhálózat törlése nélkül.
+  */
+  state.candidates=buildEdgePriorityCandidates();
+  state.candidateIndex=0;
+  state.passNumber=(state.passNumber||1)+1;
+  state.finished=false;
+  state.paused=false;
+
+  state.minEdgeRadius=limits.minRadius;
+  state.maxAllowedEdgeRadius=Math.min(
+    limits.maxRadius,
+    Math.max(limits.minRadius,limits.minRadius*2.6)
+  );
+  state.maxEdgeRadius=Math.max(
+    state.maxEdgeRadius,
+    state.maxAllowedEdgeRadius
+  );
+  state.bucketSize=Math.max(8,state.maxAllowedEdgeRadius*4);
+  state.seedSpacing=Math.max(
+    state.minEdgeRadius*5,
+    Number(gridSizeInput.value)*.8
+  );
+  state.lastSeedCandidate=null;
+  state.lastVisualUpdate=0;
+  state.lastVisualCircleCount=reconstructionCircles.length;
+
+  /*
+    Az új listában azokat a pontokat előzetesen használtnak tekintjük,
+    amelyek közvetlen közelében már van első fázisú kör. Így a folytatás
+    elsősorban a még hiányzó élszakaszokat keresi.
+  */
+  rebuildEdgeSpatialBuckets(state);
+
+  for(const candidate of state.candidates){
+    const nearby=nearbyEdgeCircles(
+      state,
+      candidate.x,
+      candidate.y,
+      state.minEdgeRadius
+    );
+    candidate.used=nearby.some(circle=>
+      circle.phase===1&&
+      Math.hypot(candidate.x-circle.x,candidate.y-circle.y)
+        <=circle.radius+state.minEdgeRadius*.8
+    );
+  }
+
+  continueEdgeGenerationButton.disabled=true;
   runEdgeNetworkGeneration();
 }
 

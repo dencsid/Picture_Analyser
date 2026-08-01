@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.13/B – automatikus belső körök</title>
+<title>Picture Analyzer Lab V0.13/C – globális prioritási lista</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -280,8 +280,8 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.13/B – automatikus belső körök</h1>
-  <p>Első fázis: homogén területek nagy körei. Második fázis: fontos pontok automatikus belső érintő körei.</p>
+  <h1>Picture Analyzer Lab V0.13/C – globális prioritási lista</h1>
+  <p>Első fázis: homogén területek nagy körei. Második fázis: globális prioritási lista, növekvő Sobel- és élhangsúllyal.</p>
 </header>
 <main>
 <section class="panel">
@@ -449,7 +449,7 @@ button {
     <div class="control">
       <label for="automaticInnerCircleCount"><span>Automatikus belső körök száma</span><span id="automaticInnerCircleCountValue">500</span></label>
       <input id="automaticInnerCircleCount" type="range" min="10" max="10000" step="10" value="500">
-      <div class="metric-note">A második fázis a részletgazdag pontokat keresi, majd a pontot fedő legfelső körbe illeszti az új belső érintő kört.</div>
+      <div class="metric-note">A második fázis globális prioritási listát készít. Előrehaladás közben a Sobel- és élközeli pontok egyre nagyobb súlyt kapnak.</div>
     </div>
     <div class="button-row">
       <button id="startAutomaticInnerPhase" disabled>2. fázis indítása</button>
@@ -1120,7 +1120,53 @@ function sampleAt(r){if(!radiusTest)return null;return radiusTest.samples.reduce
 function updateRadiusStatistics(){if(!radiusTest)return clearRadiusStatistics();const r=Number(manualRadiusInput.value),q=sampleAt(r);testCenterBox.textContent=`(${radiusTest.x}, ${radiusTest.y})`;currentRadiusStatBox.textContent=`${r} px`;diskAverageBox.textContent=q.diskAverage.toFixed(2);ringAverageBox.textContent=q.ringAverage.toFixed(2);suggestedRadiusBox.textContent=`${radiusTest.suggestedRadius} px`;stopReasonBox.textContent=radiusTest.stopReason;}
 function clearRadiusStatistics(){[testCenterBox,currentRadiusStatBox,diskAverageBox,ringAverageBox,suggestedRadiusBox,stopReasonBox,firstCircleColorBox].forEach(e=>e.textContent="—");}
 function drawRadiusInspection(){if(!radiusTest)return;ctx.save();ctx.lineWidth=2;ctx.setLineDash([7,5]);ctx.strokeStyle="yellow";ctx.beginPath();ctx.arc(radiusTest.x,radiusTest.y,Number(manualRadiusInput.value),0,Math.PI*2);ctx.stroke();if(showSuggestedCircleInput.checked){ctx.setLineDash([]);ctx.strokeStyle="cyan";ctx.beginPath();ctx.arc(radiusTest.x,radiusTest.y,radiusTest.suggestedRadius,0,Math.PI*2);ctx.stroke()}ctx.fillStyle="white";ctx.strokeStyle="black";ctx.beginPath();ctx.arc(radiusTest.x,radiusTest.y,4,0,Math.PI*2);ctx.fill();ctx.stroke();ctx.restore();}
-function averageSourceColor(cx,cy,r){const d=sourceImageData.data,w=sourceImageData.width,h=sourceImageData.height,r2=r*r;let R=0,G=0,B=0,n=0;for(let y=Math.max(0,cy-r);y<=Math.min(h-1,cy+r);y++)for(let x=Math.max(0,cx-r);x<=Math.min(w-1,cx+r);x++)if((x-cx)**2+(y-cy)**2<=r2){let i=(y*w+x)*4;R+=d[i];G+=d[i+1];B+=d[i+2];n++}return{r:Math.round(R/n),g:Math.round(G/n),b:Math.round(B/n)}}
+function averageSourceColor(cx,cy,r){
+  const data=sourceImageData.data;
+  const width=sourceImageData.width;
+  const height=sourceImageData.height;
+
+  const centerX=Number(cx);
+  const centerY=Number(cy);
+  const radius=Math.max(0,Number(r));
+
+  if(
+    !Number.isFinite(centerX)||
+    !Number.isFinite(centerY)||
+    !Number.isFinite(radius)
+  ){
+    return{r:0,g:0,b:0};
+  }
+
+  const minX=Math.max(0,Math.floor(centerX-radius));
+  const maxX=Math.min(width-1,Math.ceil(centerX+radius));
+  const minY=Math.max(0,Math.floor(centerY-radius));
+  const maxY=Math.min(height-1,Math.ceil(centerY+radius));
+  const radiusSquared=radius*radius;
+
+  let red=0,green=0,blue=0,count=0;
+
+  for(let y=minY;y<=maxY;y++){
+    for(let x=minX;x<=maxX;x++){
+      const dx=x-centerX;
+      const dy=y-centerY;
+      if(dx*dx+dy*dy>radiusSquared)continue;
+
+      const index=(y*width+x)*4;
+      red+=data[index];
+      green+=data[index+1];
+      blue+=data[index+2];
+      count++;
+    }
+  }
+
+  if(!count)return sourceColorAt(centerX,centerY);
+
+  return{
+    r:Math.round(red/count),
+    g:Math.round(green/count),
+    b:Math.round(blue/count)
+  };
+}
 function drawFirstCircle(){if(!firstCircle)return;ctx.save();if(fillFirstCircleInput.checked){ctx.fillStyle=`rgb(${firstCircle.color.r},${firstCircle.color.g},${firstCircle.color.b})`;ctx.beginPath();ctx.arc(firstCircle.x,firstCircle.y,firstCircle.radius,0,Math.PI*2);ctx.fill()}ctx.strokeStyle="black";ctx.lineWidth=Math.max(1.5,firstCircle.radius*.035);ctx.beginPath();ctx.arc(firstCircle.x,firstCircle.y,firstCircle.radius,0,Math.PI*2);ctx.stroke();ctx.restore();}
 function drawRadiusChart(){const c=radiusChartCtx,w=radiusChart.width,h=radiusChart.height;c.clearRect(0,0,w,h);c.fillStyle="white";c.fillRect(0,0,w,h);c.strokeStyle="#bbb";c.strokeRect(.5,.5,w-1,h-1);if(!radiusTest||!radiusTest.samples.length)return;const a=radiusTest.samples,mr=Math.max(...a.map(s=>s.radius)),mv=Math.max(Number(ringThresholdInput.value),...a.map(s=>Math.max(s.diskAverage,s.ringAverage))),X=r=>32+r/mr*(w-40),Y=v=>h-22-v/mv*(h-30);c.strokeStyle="#222";c.setLineDash([]);c.beginPath();a.forEach((s,i)=>i?c.lineTo(X(s.radius),Y(s.diskAverage)):c.moveTo(X(s.radius),Y(s.diskAverage)));c.stroke();c.strokeStyle="#666";c.setLineDash([5,4]);c.beginPath();a.forEach((s,i)=>i?c.lineTo(X(s.radius),Y(s.ringAverage)):c.moveTo(X(s.radius),Y(s.ringAverage)));c.stroke();c.setLineDash([]);c.strokeStyle="#000";c.beginPath();c.moveTo(X(radiusTest.suggestedRadius),8);c.lineTo(X(radiusTest.suggestedRadius),h-22);c.stroke();}
 
@@ -1406,60 +1452,123 @@ function automaticInnerCandidate(parent,point,minRadius,maxRadius){
   };
 }
 
-function chooseImportantPointForInnerPhase(random,minRadius,maxRadius){
-  const candidateCount=reconstructionCircles.length<5000?48:24;
-  let best=null;
+function normalizedPixelSobelAt(x,y){
+  if(!sobelData||!sourceImageData)return 0;
+  const ix=Math.max(0,Math.min(sourceImageData.width-1,Math.round(x)));
+  const iy=Math.max(0,Math.min(sourceImageData.height-1,Math.round(y)));
+  const value=sobelData[iy*sourceImageData.width+ix]||0;
+  return Math.max(0,Math.min(1,value/Math.max(1e-9,rawSobelMaximum)));
+}
 
-  for(let i=0;i<candidateCount;i++){
-    // A négyzetgyök a nagy részletességű cellák felé tolja a választást,
-    // de nem teszi teljesen determinisztikussá.
-    const x=random()*sourceImage.width;
-    const y=random()*sourceImage.height;
-    const detail=combinedDetailAtPixel(x,y);
-    const weightedDetail=Math.pow(Math.max(0,detail),.65);
+function edgePriorityAt(x,y){
+  buildCorridorDistanceField();
 
-    if(random()>weightedDetail)continue;
+  const ix=Math.max(0,Math.min(sourceImageData.width-1,Math.round(x)));
+  const iy=Math.max(0,Math.min(sourceImageData.height-1,Math.round(y)));
+  const index=iy*sourceImageData.width+ix;
 
-    const parent=findTopmostCircleContainingPoint(x,y);
-    if(!parent||parent.radius<2*minRadius)return best;
+  const directEdge=normalizedPixelSobelAt(ix,iy);
+  const distance=corridorDistance?corridorDistance[index]:Infinity;
+  const halfWidth=Math.max(1,Number(corridorHalfWidthInput.value));
 
-    const allowedMaximum=Math.min(
-      maxRadius,
-      parent.radius*.49,
-      parent.radius*Number(childRadiusPercentInput.value)/100
-    );
-    if(allowedMaximum<minRadius)continue;
+  const proximity=Number.isFinite(distance)
+    ?Math.max(0,1-distance/halfWidth)
+    :0;
 
-    const candidate=automaticInnerCandidate(
-      parent,
-      {x,y,detail},
-      minRadius,
-      allowedMaximum
-    );
-    if(!candidate)continue;
+  return Math.max(directEdge,proximity*proximity*(3-2*proximity));
+}
 
-    // Fontos pont + használható sugár. A részletesség dominál,
-    // a sugár csak az azonosan fontos jelöltek között dönt.
-    const radiusRatio=candidate.radius/Math.max(minRadius,maxRadius);
-    const score=.82*detail+.18*Math.min(1,radiusRatio);
+function buildGlobalInnerPriorityList(random){
+  const gridSize=Math.max(2,Number(gridSizeInput.value));
+  const points=[];
 
-    if(!best||score>best.score){
-      best={...candidate,score};
+  /*
+    Cellánként több, enyhén eltolt mintapont készül.
+    Ettől a lista globális, mégsem szabályos rács látszik majd.
+  */
+  for(const cell of analysis.cells){
+    const baseX=cell.col*gridSize;
+    const baseY=cell.row*gridSize;
+    const cellWidth=Math.min(gridSize,sourceImage.width-baseX);
+    const cellHeight=Math.min(gridSize,sourceImage.height-baseY);
+
+    if(cellWidth<=0||cellHeight<=0)continue;
+
+    const samples=cellWidth*cellHeight>gridSize*gridSize*.55?4:2;
+
+    for(let sample=0;sample<samples;sample++){
+      const x=baseX+(0.18+0.64*random())*cellWidth;
+      const y=baseY+(0.18+0.64*random())*cellHeight;
+
+      const combined=Math.max(0,Math.min(1,cell.combinedDetail||0));
+      const sobel=normalizedPixelSobelAt(x,y);
+      const edge=edgePriorityAt(x,y);
+
+      points.push({
+        x,
+        y,
+        combined,
+        sobel,
+        edge,
+        rejected:false
+      });
     }
   }
 
-  return best;
+  return points;
+}
+
+function innerPriorityScore(point,progress){
+  /*
+    A második fázis elején a kombinált részletesség dominál.
+    Ahogy haladunk, a Sobel és az élközelség súlya fokozatosan nő.
+  */
+  const t=Math.max(0,Math.min(1,progress));
+
+  const combinedWeight=1.00-0.35*t;
+  const sobelWeight=0.20+0.65*t;
+  const edgeWeight=0.10+0.90*t;
+  const totalWeight=combinedWeight+sobelWeight+edgeWeight;
+
+  return(
+    combinedWeight*point.combined+
+    sobelWeight*point.sobel+
+    edgeWeight*point.edge
+  )/totalWeight;
+}
+
+function sortGlobalInnerPriorityList(points,progress){
+  for(const point of points){
+    point.dynamicPriority=innerPriorityScore(point,progress);
+  }
+
+  points.sort((a,b)=>b.dynamicPriority-a.dynamicPriority);
 }
 
 function generateAutomaticInnerCircles(){
   if(!sourceImage||!reconstructionCircles.length||automaticInnerPhaseRunning)return;
+
   const limits=getPhysicalCircleLimits();
   if(!limits)return;
 
   const requested=Number(automaticInnerCircleCountInput.value);
   const random=mulberry32(
-    (sourceImage.width*2654435761^sourceImage.height*1597334677^reconstructionCircles.length*2246822519^requested)>>>0
+    (
+      sourceImage.width*2654435761^
+      sourceImage.height*1597334677^
+      reconstructionCircles.length*2246822519^
+      requested
+    )>>>0
   );
+
+  const priorityPoints=buildGlobalInnerPriorityList(random);
+
+  if(!priorityPoints.length){
+    setStatus("Nem készült globális prioritási lista.");
+    return;
+  }
+
+  sortGlobalInnerPriorityList(priorityPoints,0);
 
   automaticInnerPhaseRunning=true;
   startAutomaticInnerPhaseButton.disabled=true;
@@ -1474,59 +1583,128 @@ function generateAutomaticInnerCircles(){
   updateChildCircleStats();
 
   let added=0;
-  let failedRounds=0;
-  const maximumFailedRounds=Math.max(500,requested*6);
+  let inspected=0;
+  let listIndex=0;
+  let lastSortAt=0;
 
-  setStatus(`Második fázis: 0 / ${requested.toLocaleString()} belső kör…`);
+  /*
+    A lista időszakosan újrarendeződik, mert a Sobel- és élprioritás
+    súlya a második fázis előrehaladtával növekszik.
+  */
+  const resortInterval=Math.max(10,Math.floor(requested/40));
+
+  setStatus(
+    `Második fázis: globális prioritási lista készült `+
+    `(${priorityPoints.length.toLocaleString()} pont).`
+  );
 
   const processChunk=()=>{
     const chunkStart=performance.now();
 
     while(
-      automaticInnerPhaseRunning &&
-      added<requested &&
-      failedRounds<maximumFailedRounds &&
+      automaticInnerPhaseRunning&&
+      added<requested&&
+      listIndex<priorityPoints.length&&
       performance.now()-chunkStart<28
     ){
-      const candidate=chooseImportantPointForInnerPhase(
-        random,
+      const progress=requested>0?added/requested:1;
+
+      if(added-lastSortAt>=resortInterval){
+        const remaining=priorityPoints.slice(listIndex);
+        sortGlobalInnerPriorityList(remaining,progress);
+        priorityPoints.splice(listIndex,remaining.length,...remaining);
+        lastSortAt=added;
+      }
+
+      const point=priorityPoints[listIndex++];
+      inspected++;
+
+      if(point.rejected)continue;
+
+      const parent=findTopmostCircleContainingPoint(point.x,point.y);
+      if(!parent||parent.radius<2*limits.minRadius){
+        point.rejected=true;
+        continue;
+      }
+
+      const allowedMaximum=Math.min(
+        limits.maxRadius,
+        parent.radius*.49,
+        parent.radius*Number(childRadiusPercentInput.value)/100
+      );
+
+      if(allowedMaximum<limits.minRadius){
+        point.rejected=true;
+        continue;
+      }
+
+      const candidate=automaticInnerCandidate(
+        parent,
+        {
+          x:point.x,
+          y:point.y,
+          detail:point.dynamicPriority
+        },
         limits.minRadius,
-        limits.maxRadius
+        allowedMaximum
       );
 
       if(!candidate){
-        failedRounds++;
+        point.rejected=true;
         continue;
       }
+
+      const safeColor=(
+        candidate.color&&
+        Number.isFinite(candidate.color.r)&&
+        Number.isFinite(candidate.color.g)&&
+        Number.isFinite(candidate.color.b)
+      )
+        ?candidate.color
+        :sourceColorAt(candidate.x,candidate.y);
 
       reconstructionCircles.push({
         x:candidate.x,
         y:candidate.y,
         radius:candidate.radius,
         color:{
-          r:Number.isFinite(candidate.color?.r)?candidate.color.r:0,
-          g:Number.isFinite(candidate.color?.g)?candidate.color.g:0,
-          b:Number.isFinite(candidate.color?.b)?candidate.color.b:0
+          r:safeColor.r,
+          g:safeColor.g,
+          b:safeColor.b
         },
-        detail:Number.isFinite(candidate.detail)?candidate.detail:0,
+        detail:Number.isFinite(point.dynamicPriority)
+          ?point.dynamicPriority
+          :0,
         parent:candidate.parent,
-        phase:2
+        phase:2,
+        prioritySource:{
+          combined:point.combined,
+          sobel:point.sobel,
+          edge:point.edge
+        }
       });
 
       added++;
-      failedRounds=0;
     }
 
     updateReconstructionStats();
     draw();
+
+    const progressPercent=requested
+      ?Math.round(100*added/requested)
+      :100;
+
     setStatus(
-      `Második fázis: ${added.toLocaleString()} / ${requested.toLocaleString()} belső kör…`
+      `Második fázis: ${added.toLocaleString()} / `+
+      `${requested.toLocaleString()} belső kör; `+
+      `${inspected.toLocaleString()} prioritási pont megvizsgálva; `+
+      `${progressPercent}%.`
     );
 
     if(
-      automaticInnerPhaseRunning &&
-      added<requested &&
-      failedRounds<maximumFailedRounds
+      automaticInnerPhaseRunning&&
+      added<requested&&
+      listIndex<priorityPoints.length
     ){
       setTimeout(processChunk,0);
       return;
@@ -1541,12 +1719,13 @@ function generateAutomaticInnerCircles(){
 
     const reason=added>=requested
       ?"a kért belső körszám elérve"
-      :failedRounds>=maximumFailedRounds
-        ?"nem talált több megfelelő fontos pontot és elférő belső kört"
+      :listIndex>=priorityPoints.length
+        ?"a globális prioritási lista elfogyott"
         :"a felhasználó leállította";
 
     setStatus(
-      `A második fázis befejeződött: ${added.toLocaleString()} új belső kör; ${reason}.`
+      `A második fázis befejeződött: `+
+      `${added.toLocaleString()} új belső kör; ${reason}.`
     );
   };
 

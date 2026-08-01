@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.13/C – globális prioritási lista</title>
+<title>Picture Analyzer Lab V0.13/D – kapcsolható háttérkép</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -280,8 +280,8 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.13/C – globális prioritási lista</h1>
-  <p>Első fázis: homogén területek nagy körei. Második fázis: globális prioritási lista, növekvő Sobel- és élhangsúllyal.</p>
+  <h1>Picture Analyzer Lab V0.13/D – kapcsolható háttérkép</h1>
+  <p>Első fázis: homogén területek nagy körei. Második fázis: globális prioritási lista. Az eredeti háttérkép külön kapcsolható.</p>
 </header>
 <main>
 <section class="panel">
@@ -419,7 +419,11 @@ button {
     <div class="control">
       <label for="circleLayerOpacity"><span>Körréteg átlátszatlansága</span><span><span id="circleLayerOpacityValue">70</span>%</span></label>
       <input id="circleLayerOpacity" type="range" min="5" max="100" step="1" value="70">
-      <div class="metric-note">Az eredeti kép mindig látható marad alul, a körök pedig mindig láthatók felül. A réteg nem kapcsolható ki.</div>
+      <div class="metric-note">A körréteg átlátszatlansága külön állítható.</div>
+    </div>
+    <div class="row">
+      <input id="showOriginalUnderCircles" type="checkbox" checked>
+      <label for="showOriginalUnderCircles">Eredeti kép megjelenítése a körök mögött</label>
     </div>
     <div id="physicalCircleInfo" class="calculated-box">Tölts be egy képet a fizikai méret képpontokra váltásához.</div>
     <div class="button-row">
@@ -542,7 +546,7 @@ const corridorOpacityInput = $("corridorOpacity");
 const corridorOpacityValue = $("corridorOpacityValue");
 const splitCorridorSidesInput = $("splitCorridorSides");
 const combinedControls=$("combinedControls"),sobelWeightInput=$("sobelWeight"),sobelWeightValue=$("sobelWeightValue"),rgbSpreadWeightInput=$("rgbSpreadWeight"),rgbSpreadWeightValue=$("rgbSpreadWeightValue"),combinedFormula=$("combinedFormula");
-const reconstructionControls=$("reconstructionControls"),imageCategoryInput=$("imageCategory"),finalWidthCmInput=$("finalWidthCm"),finalHeightCmInput=$("finalHeightCm"),lockFinalAspectInput=$("lockFinalAspect"),minCircleDiameterMmInput=$("minCircleDiameterMm"),minCircleDiameterMmValue=$("minCircleDiameterMmValue"),maxCircleDiameterMmInput=$("maxCircleDiameterMm"),maxCircleDiameterMmValue=$("maxCircleDiameterMmValue"),reconstructionCircleCountInput=$("reconstructionCircleCount"),reconstructionCircleCountValue=$("reconstructionCircleCountValue"),circleLayerOpacityInput=$("circleLayerOpacity"),circleLayerOpacityValue=$("circleLayerOpacityValue"),physicalCircleInfo=$("physicalCircleInfo"),generateReconstructionButton=$("generateReconstruction"),clearReconstructionButton=$("clearReconstruction"),saveReconstructionPdfButton=$("saveReconstructionPdf"),reconstructionCategoryStat=$("reconstructionCategoryStat"),placedCircleCountBox=$("placedCircleCount"),minimumRadiusStat=$("minimumRadiusStat"),maximumRadiusStat=$("maximumRadiusStat");
+const reconstructionControls=$("reconstructionControls"),imageCategoryInput=$("imageCategory"),finalWidthCmInput=$("finalWidthCm"),finalHeightCmInput=$("finalHeightCm"),lockFinalAspectInput=$("lockFinalAspect"),minCircleDiameterMmInput=$("minCircleDiameterMm"),minCircleDiameterMmValue=$("minCircleDiameterMmValue"),maxCircleDiameterMmInput=$("maxCircleDiameterMm"),maxCircleDiameterMmValue=$("maxCircleDiameterMmValue"),reconstructionCircleCountInput=$("reconstructionCircleCount"),reconstructionCircleCountValue=$("reconstructionCircleCountValue"),circleLayerOpacityInput=$("circleLayerOpacity"),circleLayerOpacityValue=$("circleLayerOpacityValue"),showOriginalUnderCirclesInput=$("showOriginalUnderCircles"),physicalCircleInfo=$("physicalCircleInfo"),generateReconstructionButton=$("generateReconstruction"),clearReconstructionButton=$("clearReconstruction"),saveReconstructionPdfButton=$("saveReconstructionPdf"),reconstructionCategoryStat=$("reconstructionCategoryStat"),placedCircleCountBox=$("placedCircleCount"),minimumRadiusStat=$("minimumRadiusStat"),maximumRadiusStat=$("maximumRadiusStat");
 const detailChildControls=$("detailChildControls"),childRadiusPercentInput=$("childRadiusPercent"),childRadiusPercentValue=$("childRadiusPercentValue"),childDetailWeightInput=$("childDetailWeight"),childDetailWeightValue=$("childDetailWeightValue"),automaticInnerCircleCountInput=$("automaticInnerCircleCount"),automaticInnerCircleCountValue=$("automaticInnerCircleCountValue"),startAutomaticInnerPhaseButton=$("startAutomaticInnerPhase"),stopAutomaticInnerPhaseButton=$("stopAutomaticInnerPhase"),suggestChildCircleButton=$("suggestChildCircle"),acceptChildCircleButton=$("acceptChildCircle"),clearChildSuggestionButton=$("clearChildSuggestion"),selectedCircleStat=$("selectedCircleStat"),selectedCircleDetailStat=$("selectedCircleDetailStat"),childTangencyStat=$("childTangencyStat"),childCenterStat=$("childCenterStat"),childRadiusStat=$("childRadiusStat"),childColorStat=$("childColorStat");
 const radiusControls=$("radiusControls"),detailGammaInput=$("detailGamma"),detailGammaValue=$("detailGammaValue"),darkCandidatePercentInput=$("darkCandidatePercent"),darkCandidatePercentValue=$("darkCandidatePercentValue"),maxTestRadiusInput=$("maxTestRadius"),maxTestRadiusValue=$("maxTestRadiusValue"),radiusStepInput=$("radiusStep"),radiusStepValue=$("radiusStepValue"),ringWidthInput=$("ringWidth"),ringWidthValue=$("ringWidthValue"),ringThresholdInput=$("ringThreshold"),ringThresholdValue=$("ringThresholdValue"),jumpThresholdInput=$("jumpThreshold"),jumpThresholdValue=$("jumpThresholdValue"),manualRadiusInput=$("manualRadius"),manualRadiusValue=$("manualRadiusValue"),showSuggestedCircleInput=$("showSuggestedCircle"),fillFirstCircleInput=$("fillFirstCircle"),chooseDarkPointButton=$("chooseDarkPoint"),createFirstCircleButton=$("createFirstCircle"),clearRadiusTestButton=$("clearRadiusTest"),testCenterBox=$("testCenter"),currentRadiusStatBox=$("currentRadiusStat"),diskAverageBox=$("diskAverage"),ringAverageBox=$("ringAverage"),suggestedRadiusBox=$("suggestedRadius"),stopReasonBox=$("stopReason"),firstCircleColorBox=$("firstCircleColor"),radiusChart=$("radiusChart"),radiusChartCtx=radiusChart.getContext("2d");
 const edgeThresholdBox = $("edgeThreshold");
@@ -684,6 +688,7 @@ minCircleDiameterMmInput.addEventListener("input",()=>{minCircleDiameterMmValue.
 maxCircleDiameterMmInput.addEventListener("input",()=>{maxCircleDiameterMmValue.textContent=maxCircleDiameterMmInput.value;updatePhysicalCircleInfo();});
 reconstructionCircleCountInput.addEventListener("input",()=>reconstructionCircleCountValue.textContent=reconstructionCircleCountInput.value);
 circleLayerOpacityInput.addEventListener("input",()=>{circleLayerOpacityValue.textContent=circleLayerOpacityInput.value;scheduleDraw();});
+showOriginalUnderCirclesInput.addEventListener("change",scheduleDraw);
 childRadiusPercentInput.addEventListener("input",()=>{childRadiusPercentValue.textContent=childRadiusPercentInput.value;if(selectedReconstructionCircle)suggestChildCircle();});
 childDetailWeightInput.addEventListener("input",()=>{childDetailWeightValue.textContent=childDetailWeightInput.value;if(selectedReconstructionCircle)suggestChildCircle();});
 automaticInnerCircleCountInput.addEventListener("input",()=>automaticInnerCircleCountValue.textContent=automaticInnerCircleCountInput.value);
@@ -730,7 +735,7 @@ resetViewButton.addEventListener("click", () => {
   rgbSpreadWeightInput.value = 50;
   rgbSpreadWeightValue.textContent = "50";
   combinedFormula.textContent = "50% Sobel + 50% színszórás";
-  circleLayerOpacityInput.value=70;circleLayerOpacityValue.textContent="70";
+  circleLayerOpacityInput.value=70;circleLayerOpacityValue.textContent="70";showOriginalUnderCirclesInput.checked=true;
   selectedReconstructionCircle=null;childCircleSuggestion=null;childPriorityCandidates=[];selectedChildPriorityPoint=null;updateChildCircleStats();
   updateMetricDescription();
   updateEdgeControlsVisibility();
@@ -1734,7 +1739,14 @@ function generateAutomaticInnerCircles(){
 
 function drawPartialReconstruction(){
   ctx.save();
-  ctx.drawImage(sourceImage,0,0);
+
+  if(showOriginalUnderCirclesInput.checked){
+    ctx.drawImage(sourceImage,0,0);
+  }else{
+    ctx.fillStyle="#ffffff";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+  }
+
   ctx.globalAlpha=Number(circleLayerOpacityInput.value)/100;
   for(const circle of reconstructionCircles){
     ctx.fillStyle=`rgb(${circle.color.r},${circle.color.g},${circle.color.b})`;

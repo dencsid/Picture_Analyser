@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.12/D – kijelölés és PDF javítása</title>
+<title>Picture Analyzer Lab V0.13/A – homogén területek először</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -280,8 +280,8 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.12/D – kijelölés és PDF javítása</h1>
-  <p>Kézi körkiválasztás, állítható rétegátlátszóság és egyetlen belülről érintő utódkör javaslata.</p>
+  <h1>Picture Analyzer Lab V0.13/A – homogén területek először</h1>
+  <p>Az első fázis a homogén, kevés részletet tartalmazó területeken kezdi a nagy körök elhelyezését.</p>
 </header>
 <main>
 <section class="panel">
@@ -1137,67 +1137,195 @@ function getDetailCellAt(x,y){
 function generatePartialReconstruction(){
   if(!sourceImage||!analysis.cells.length)return;
   const limits=getPhysicalCircleLimits();if(!limits)return;
+
   const requested=Number(reconstructionCircleCountInput.value);
   const width=sourceImage.width,height=sourceImage.height;
   const circles=[];
+
   const seed=(width*73856093^height*19349663^requested*83492791)>>>0;
   const random=mulberry32(seed);
+
   const bucketSize=Math.max(8,Math.min(limits.maxRadius,Math.max(limits.minRadius*4,24)));
   const buckets=new Map();
   const key=(bx,by)=>`${bx},${by}`;
-  const insert=c=>{const k=key(Math.floor(c.x/bucketSize),Math.floor(c.y/bucketSize));let list=buckets.get(k);if(!list)buckets.set(k,list=[]);list.push(c);};
-  const maxAttempts=Math.min(3000000,Math.max(10000,requested*60));
-  let attempts=0;
-  reconstructionCircles=[];selectedReconstructionCircle=null;childCircleSuggestion=null;childPriorityCandidates=[];selectedChildPriorityPoint=null;updateChildCircleStats();
+
+  const insert=c=>{
+    const k=key(Math.floor(c.x/bucketSize),Math.floor(c.y/bucketSize));
+    let list=buckets.get(k);
+    if(!list)buckets.set(k,list=[]);
+    list.push(c);
+  };
+
+  /*
+    Első fázis:
+    - a kör helyét több véletlen jelölt közül választjuk;
+    - előnyt kap a kevés részletet tartalmazó, homogén terület;
+    - ugyanakkor előnyt kap az a hely is, ahol nagyobb kör fér el;
+    - a sugár nem a részletességből készül, hanem a tényleges szabad helyből.
+  */
+  const candidateCountForStage=()=>{
+    const count=circles.length;
+    if(count<200)return 48;
+    if(count<1000)return 28;
+    if(count<5000)return 16;
+    return 8;
+  };
+
+  const evaluateCandidate=(x,y)=>{
+    const cell=getDetailCellAt(x,y);
+    if(!cell)return null;
+
+    let clearance=Math.min(
+      limits.maxRadius,
+      x,
+      y,
+      width-x,
+      height-y
+    );
+
+    if(clearance<limits.minRadius)return null;
+
+    const bx=Math.floor(x/bucketSize);
+    const by=Math.floor(y/bucketSize);
+    const reach=Math.ceil((limits.maxRadius+clearance)/bucketSize);
+
+    for(let yy=by-reach;yy<=by+reach&&clearance>=limits.minRadius;yy++){
+      for(let xx=bx-reach;xx<=bx+reach&&clearance>=limits.minRadius;xx++){
+        const list=buckets.get(key(xx,yy));
+        if(!list)continue;
+
+        for(const old of list){
+          const freeDistance=Math.hypot(x-old.x,y-old.y)-old.radius;
+          if(freeDistance<clearance)clearance=freeDistance;
+          if(clearance<limits.minRadius)break;
+        }
+      }
+    }
+
+    if(clearance<limits.minRadius)return null;
+
+    const radius=Math.min(limits.maxRadius,clearance);
+    const detail=Math.max(0,Math.min(1,cell.combinedDetail));
+    const homogeneity=1-detail;
+    const radiusRatio=Math.max(0,Math.min(1,radius/Math.max(limits.minRadius,limits.maxRadius)));
+
+    /*
+      A pontszám egyszerre jutalmazza:
+      - a nagy elférő sugarat;
+      - a kis részletességet.
+
+      A 0.12-es alsó tag biztosítja, hogy amikor a homogén helyek
+      már beteltek, a generálás tovább tudjon haladni a részletesebb
+      területek felé is.
+    */
+    const homogeneityBoost=.12+.88*Math.pow(homogeneity,2.2);
+    const score=radiusRatio*homogeneityBoost*(.99+.02*random());
+
+    return {
+      x,
+      y,
+      radius,
+      detail,
+      score,
+      color:{
+        r:Math.round(cell.avgR),
+        g:Math.round(cell.avgG),
+        b:Math.round(cell.avgB)
+      }
+    };
+  };
+
+  const maxCandidateTests=Math.min(
+    4000000,
+    Math.max(20000,requested*32)
+  );
+
+  let candidateTests=0;
+  reconstructionCircles=[];
+  selectedReconstructionCircle=null;
+  childCircleSuggestion=null;
+  childPriorityCandidates=[];
+  selectedChildPriorityPoint=null;
+  updateChildCircleStats();
+
   generateReconstructionButton.disabled=true;
   clearReconstructionButton.disabled=true;
   saveReconstructionPdfButton.disabled=true;
-  displayModeInput.value="partialReconstruction";updateMetricDescription();updateEdgeControlsVisibility();
-  setStatus(`Szabad középpontú körök generálása: 0 / ${requested.toLocaleString()}…`);
+
+  displayModeInput.value="partialReconstruction";
+  updateMetricDescription();
+  updateEdgeControlsVisibility();
+
+  setStatus(`Homogén területeket előnyben részesítő körgenerálás: 0 / ${requested.toLocaleString()}…`);
 
   const processChunk=()=>{
-    const chunkEnd=Math.min(maxAttempts,attempts+2500);
-    while(attempts<chunkEnd&&circles.length<requested){
-      attempts++;
-      const x=limits.minRadius+random()*Math.max(1,width-2*limits.minRadius);
-      const y=limits.minRadius+random()*Math.max(1,height-2*limits.minRadius);
-      const cell=getDetailCellAt(x,y);if(!cell)continue;
-      const detail=Math.max(0,Math.min(1,cell.combinedDetail));
-      const desired=limits.maxRadius-(limits.maxRadius-limits.minRadius)*Math.pow(detail,.72);
-      let clearance=Math.min(x,y,width-x,height-y);
-      const reach=Math.ceil((limits.maxRadius+desired)/bucketSize);
-      const bx=Math.floor(x/bucketSize),by=Math.floor(y/bucketSize);
-      for(let yy=by-reach;yy<=by+reach&&clearance>=limits.minRadius;yy++){
-        for(let xx=bx-reach;xx<=bx+reach&&clearance>=limits.minRadius;xx++){
-          const list=buckets.get(key(xx,yy));if(!list)continue;
-          for(const old of list){
-            const d=Math.hypot(x-old.x,y-old.y)-old.radius;
-            if(d<clearance)clearance=d;
-            if(clearance<limits.minRadius)break;
-          }
+    const chunkStart=performance.now();
+
+    while(
+      circles.length<requested &&
+      candidateTests<maxCandidateTests &&
+      performance.now()-chunkStart<28
+    ){
+      const candidateCount=candidateCountForStage();
+      let best=null;
+
+      for(let i=0;i<candidateCount&&candidateTests<maxCandidateTests;i++){
+        candidateTests++;
+
+        const x=limits.minRadius+random()*Math.max(1,width-2*limits.minRadius);
+        const y=limits.minRadius+random()*Math.max(1,height-2*limits.minRadius);
+        const candidate=evaluateCandidate(x,y);
+
+        if(candidate&&(!best||candidate.score>best.score)){
+          best=candidate;
         }
       }
-      if(clearance<limits.minRadius)continue;
-      const radius=Math.max(limits.minRadius,Math.min(desired,clearance));
-      const color={r:Math.round(cell.avgR),g:Math.round(cell.avgG),b:Math.round(cell.avgB)};
-      const circle={x,y,radius,color,detail};
-      circles.push(circle);insert(circle);
+
+      if(!best)continue;
+
+      const circle={
+        x:best.x,
+        y:best.y,
+        radius:best.radius,
+        color:best.color,
+        detail:best.detail
+      };
+
+      circles.push(circle);
+      insert(circle);
     }
+
     reconstructionCircles=circles;
-    updateReconstructionStats();draw();
-    setStatus(`Szabad középpontú körök generálása: ${circles.length.toLocaleString()} / ${requested.toLocaleString()} (${attempts.toLocaleString()} próba)…`);
-    if(circles.length<requested&&attempts<maxAttempts){
+    updateReconstructionStats();
+    draw();
+
+    setStatus(
+      `Homogén területeket előnyben részesítő körgenerálás: `+
+      `${circles.length.toLocaleString()} / ${requested.toLocaleString()} `+
+      `(${candidateTests.toLocaleString()} vizsgált pont)…`
+    );
+
+    if(circles.length<requested&&candidateTests<maxCandidateTests){
       setTimeout(processChunk,0);
     }else{
       generateReconstructionButton.disabled=false;
       clearReconstructionButton.disabled=false;
       saveReconstructionPdfButton.disabled=circles.length===0;
-      const reason=circles.length>=requested?"a kért körszám elérve":"nem talált több megfelelő helyet";
-      setStatus(`${circles.length.toLocaleString()} szabad középpontú kör elkészült; ${reason}.`);
+
+      const reason=circles.length>=requested
+        ?"a kért körszám elérve"
+        :"nem talált több, legalább minimális méretű szabad helyet";
+
+      setStatus(
+        `${circles.length.toLocaleString()} kör elkészült; ${reason}. `+
+        `Az első körök a homogénebb területeket részesítették előnyben.`
+      );
     }
   };
+
   setTimeout(processChunk,0);
 }
+
 function drawPartialReconstruction(){
   ctx.save();
   ctx.drawImage(sourceImage,0,0);

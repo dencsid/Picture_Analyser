@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.14 – elfogadott élirány- és sugárbecsléssel</title>
+<title>Picture Analyzer Lab V0.14/A – javított 0. fázis indítás</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -280,7 +280,7 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.14 – elfogadott élirány- és sugárbecsléssel</h1>
+  <h1>Picture Analyzer Lab V0.14/A – javított 0. fázis indítás</h1>
   <p>0. fázis: változó méretű, érintő körláncok az élek két oldalán. 1. fázis: a megmaradt területek kitöltése. 2. fázis: belső finomítás.</p>
 </header>
 <main>
@@ -733,7 +733,17 @@ suggestChildCircleButton.addEventListener("click",suggestChildCircle);
 acceptChildCircleButton.addEventListener("click",acceptChildCircle);
 clearChildSuggestionButton.addEventListener("click",()=>{childCircleSuggestion=null;childPriorityCandidates=[];selectedChildPriorityPoint=null;updateChildCircleStats();scheduleDraw();});
 imageCategoryInput.addEventListener("change",()=>reconstructionCategoryStat.textContent=imageCategoryInput.options[imageCategoryInput.selectedIndex].text);
-generateEdgeSkeletonButton.addEventListener("click",generateEdgeSkeleton);
+generateEdgeSkeletonButton.addEventListener("click",()=>{
+  try{
+    generateEdgeSkeleton();
+  }catch(error){
+    console.error(error);
+    generateEdgeSkeletonButton.disabled=false;
+    generateReconstructionButton.disabled=false;
+    clearReconstructionButton.disabled=false;
+    setStatus(`A 0. fázis hibával leállt: ${error.message}`);
+  }
+});
 generateReconstructionButton.addEventListener("click",generatePartialReconstruction);
 clearReconstructionButton.addEventListener("click",()=>{automaticInnerPhaseRunning=false;startAutomaticInnerPhaseButton.disabled=true;stopAutomaticInnerPhaseButton.disabled=true;reconstructionCircles=[];selectedReconstructionCircle=null;childCircleSuggestion=null;childPriorityCandidates=[];selectedChildPriorityPoint=null;saveReconstructionPdfButton.disabled=true;edgeSkeletonPlacedStat.textContent="0";edgeSkeletonComponentsStat.textContent="0";updateReconstructionStats();updateChildCircleStats();scheduleDraw();});
 saveReconstructionPdfButton.addEventListener("click",saveReconstructionPdf);
@@ -1445,14 +1455,13 @@ function generateEdgeSkeleton(){
   const candidates=buildSkeletonSeedCandidates();
   const visited=new Uint8Array(sourceImage.width*sourceImage.height);
 
-  reconstructionCircles=circles;
+  reconstructionCircles=[];
   selectedReconstructionCircle=null;
   childCircleSuggestion=null;
   childPriorityCandidates=[];
   selectedChildPriorityPoint=null;
   updateChildCircleStats();
 
-  generateEdgeSkeletonButton.disabled=true;
   generateEdgeSkeletonButton.disabled=true;
   generateReconstructionButton.disabled=true;
   clearReconstructionButton.disabled=true;
@@ -1645,13 +1654,17 @@ function generateEdgeSkeleton(){
       if(!point)continue;
 
       const componentId=nextComponent++;
-      components.add(componentId);
+      const circleCountBefore=reconstructionCircles.length;
 
       const parentsForward={"-1":null,"1":null};
       growDirection(point,1,componentId,parentsForward);
 
       const parentsBackward={"-1":null,"1":null};
       growDirection(point,-1,componentId,parentsBackward);
+
+      if(reconstructionCircles.length>circleCountBefore){
+        components.add(componentId);
+      }
     }
 
     updateReconstructionStats();
@@ -1666,7 +1679,6 @@ function generateEdgeSkeleton(){
     if(reconstructionCircles.length<requested&&seedIndex<candidates.length){
       setTimeout(processChunk,0);
     }else{
-      generateEdgeSkeletonButton.disabled=false;
       generateEdgeSkeletonButton.disabled=false;
       generateReconstructionButton.disabled=false;
       clearReconstructionButton.disabled=false;

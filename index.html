@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Sugárbecslés tesztmodul V2 – részletességi profillal</title>
+<title>Sugárbecslés tesztmodul V3 – stabil helyi élirány</title>
 <style>
 *{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Arial,sans-serif;background:#eee;color:#222}
 header{height:58px;background:#242424;color:white;padding:8px 14px}h1{margin:0;font-size:18px}header p{margin:3px 0 0;font-size:11px;color:#ddd}
@@ -21,8 +21,8 @@ button{padding:6px;border:0;border-radius:5px;background:#555;color:white;font-w
 </head>
 <body>
 <header>
-<h1>Sugárbecslés tesztmodul V2 – részletességi profillal</h1>
-<p>Egy élpontból kiindulva a normális két oldalán keresi a következő fontos szerkezetet.</p>
+<h1>Sugárbecslés tesztmodul V3 – stabil helyi élirány</h1>
+<p>A kattintást helyi élmaximumra igazítja, majd struktúratenzorral becsüli az él normálisát.</p>
 </header>
 <main>
 <section class="panel">
@@ -30,6 +30,8 @@ button{padding:6px;border:0;border-radius:5px;background:#555;color:white;font-w
 
 <div class="control"><label>Megjelenítés</label><select id="viewMode"><option value="original">Eredeti kép</option><option value="overlay" selected>Eredeti + Sobel</option><option value="sobel">Csak Sobel</option></select></div>
 <div class="control"><label>Élérzékenység <span><span id="sensVal" class="value">60</span>%</span></label><input id="sens" type="range" min="0" max="100" value="60"></div>
+<div class="control"><label>Élpontra igazítás sugara <span><span id="snapVal" class="value">4</span> px</span></label><input id="snapRadius" type="range" min="0" max="15" value="4"></div>
+<div class="control"><label>Iránybecslő környezet sugara <span><span id="orientVal" class="value">7</span> px</span></label><input id="orientationRadius" type="range" min="2" max="30" value="7"></div>
 <div class="control"><label>Legkisebb sugár <span><span id="minVal" class="value">4</span> px</span></label><input id="minR" type="range" min="1" max="60" value="4"></div>
 <div class="control"><label>Legnagyobb sugár <span><span id="maxVal" class="value">80</span> px</span></label><input id="maxR" type="range" min="5" max="300" value="80"></div>
 <div class="control"><label>Mintasáv fél-szélessége <span><span id="stripVal" class="value">6</span> px</span></label><input id="strip" type="range" min="1" max="40" value="6"></div>
@@ -50,7 +52,7 @@ button{padding:6px;border:0;border-radius:5px;background:#555;color:white;font-w
 <div class="box"><h2>Kiválasztott pont</h2>
 <div><b>Hely:</b> <span id="point">—</span></div>
 <div><b>Sobel:</b> <span id="sobelValue">—</span></div>
-<div><b>Normális:</b> <span id="normal">—</span></div></div>
+<div><b>Normális:</b> <span id="normal">—</span></div><div><b>Iránybiztonság:</b> <span id="coherence">—</span></div></div>
 
 <div class="box"><h2>Sugárjavaslat</h2>
 <div><b>Negatív oldal:</b> <span id="negR">—</span></div>
@@ -75,9 +77,9 @@ const sobelCanvas=document.createElement("canvas"),sobelCtx=sobelCanvas.getConte
 const theoreticalMax=Math.hypot(1020,1020)/4;
 let image=null,imageData=null,lum=null,sobel=null,gx=null,gy=null,sobelMax=0,selection=null;
 const controls={
- viewMode:$("viewMode"),sens:$("sens"),minR:$("minR"),maxR:$("maxR"),strip:$("strip"),step:$("step"),ratio:$("ratio"),contrast:$("contrast"),method:$("method")
+ viewMode:$("viewMode"),sens:$("sens"),snapRadius:$("snapRadius"),orientationRadius:$("orientationRadius"),minR:$("minR"),maxR:$("maxR"),strip:$("strip"),step:$("step"),ratio:$("ratio"),contrast:$("contrast"),method:$("method")
 };
-const outputs={sens:$("sensVal"),minR:$("minVal"),maxR:$("maxVal"),strip:$("stripVal"),step:$("stepVal"),ratio:$("ratioVal"),contrast:$("contrastVal")};
+const outputs={sens:$("sensVal"),snapRadius:$("snapVal"),orientationRadius:$("orientVal"),minR:$("minVal"),maxR:$("maxVal"),strip:$("stripVal"),step:$("stepVal"),ratio:$("ratioVal"),contrast:$("contrastVal")};
 
 $("imageInput").addEventListener("change",async e=>{
  const file=e.target.files&&e.target.files[0]; if(!file)return;
@@ -126,15 +128,142 @@ function buildSobel(){
 }
 function normSobel(x,y){x=Math.max(0,Math.min(canvas.width-1,Math.round(x)));y=Math.max(0,Math.min(canvas.height-1,Math.round(y)));return sobel[y*canvas.width+x]/Math.max(1e-9,sobelMax)}
 function colorAt(x,y){x=Math.max(0,Math.min(canvas.width-1,Math.round(x)));y=Math.max(0,Math.min(canvas.height-1,Math.round(y)));const i=(y*canvas.width+x)*4,d=imageData.data;return{r:d[i],g:d[i+1],b:d[i+2]}}
-function analyze(x,y){
- x=Math.max(1,Math.min(canvas.width-2,x));y=Math.max(1,Math.min(canvas.height-2,y));
- const i=y*canvas.width+x,L=Math.hypot(gx[i],gy[i]);if(L<1e-9){setStatus("Itt nincs értelmezhető élirány.");return}
- const p={x,y,nx:gx[i]/L,ny:gy[i]/L,strength:normSobel(x,y)};
- p.neg=scan(p,-1);p.pos=scan(p,1);selection=p;
- $("point").textContent=`(${x}, ${y})`;$("sobelValue").textContent=`${(100*p.strength).toFixed(1)}%`;$("normal").textContent=`(${p.nx.toFixed(3)}, ${p.ny.toFixed(3)})`;
- $("negR").textContent=`${p.neg.radius.toFixed(1)} px`;$("posR").textContent=`${p.pos.radius.toFixed(1)} px`;
- $("negD").textContent=`${p.neg.distance.toFixed(1)} px`;$("posD").textContent=`${p.pos.distance.toFixed(1)} px`;draw();drawProfileChart();setStatus("A kétoldali becslés és a részletességi profil elkészült.");
+function findLocalEdgeMaximum(x,y,radius){
+ x=Math.round(x);y=Math.round(y);
+ let bestX=x,bestY=y,best=-Infinity;
+ const r=Math.max(0,Math.round(radius));
+
+ for(let yy=Math.max(1,y-r);yy<=Math.min(canvas.height-2,y+r);yy++){
+  for(let xx=Math.max(1,x-r);xx<=Math.min(canvas.width-2,x+r);xx++){
+   const dx=xx-x,dy=yy-y;
+   if(dx*dx+dy*dy>r*r)continue;
+   const value=sobel[yy*canvas.width+xx]||0;
+   if(value>best){best=value;bestX=xx;bestY=yy}
+  }
+ }
+ return{x:bestX,y:bestY};
 }
+
+function estimateNormalWithStructureTensor(cx,cy,radius){
+ /*
+   A korábbi hiba oka az volt, hogy egyetlen pixel Sobel-vektorát
+   tekintettük az él normálisának. Egyetlen pixel iránya zaj, textúra,
+   görbület vagy pontatlan kattintás miatt akár közel 90°-kal is tévedhet.
+
+   Most a környezet gradiensvektoraiból struktúratenzort készítünk:
+     J = [ sum(w*gx²)   sum(w*gx*gy) ]
+         [ sum(w*gx*gy) sum(w*gy²)  ]
+
+   A nagyobb sajátértékhez tartozó sajátvektor a domináns gradiens,
+   tehát az él helyi normálisa.
+ */
+ const r=Math.max(2,Math.round(radius));
+ const sigma=Math.max(1,r*.55);
+ const sigma2=2*sigma*sigma;
+ let jxx=0,jxy=0,jyy=0,totalWeight=0;
+
+ for(let y=Math.max(1,cy-r);y<=Math.min(canvas.height-2,cy+r);y++){
+  for(let x=Math.max(1,cx-r);x<=Math.min(canvas.width-2,cx+r);x++){
+   const dx=x-cx,dy=y-cy,d2=dx*dx+dy*dy;
+   if(d2>r*r)continue;
+
+   const i=y*canvas.width+x;
+   const gxx=gx[i]||0,gyy=gy[i]||0;
+   const magnitude=Math.hypot(gxx,gyy);
+   if(magnitude<1e-6)continue;
+
+   const spatial=Math.exp(-d2/sigma2);
+   const strength=Math.pow(magnitude/Math.max(1e-9,sobelMax),1.5);
+   const w=spatial*strength;
+
+   jxx+=w*gxx*gxx;
+   jxy+=w*gxx*gyy;
+   jyy+=w*gyy*gyy;
+   totalWeight+=w;
+  }
+ }
+
+ if(totalWeight<=1e-12)return null;
+
+ const trace=jxx+jyy;
+ const delta=Math.sqrt(Math.max(0,(jxx-jyy)*(jxx-jyy)+4*jxy*jxy));
+ const lambda1=(trace+delta)/2;
+ const lambda2=(trace-delta)/2;
+
+ let nx,ny;
+ if(Math.abs(jxy)>1e-12){
+  nx=lambda1-jyy;
+  ny=jxy;
+ }else if(jxx>=jyy){
+  nx=1;ny=0;
+ }else{
+  nx=0;ny=1;
+ }
+
+ const length=Math.hypot(nx,ny);
+ if(length<1e-12)return null;
+ nx/=length;ny/=length;
+
+ /*
+   Az előjel geometriailag mindegy, de a kijelzés folytonossága kedvéért
+   az irányt a középső pixel gradiensének félteréhez igazítjuk.
+ */
+ const ci=cy*canvas.width+cx;
+ const cgx=gx[ci]||0,cgy=gy[ci]||0;
+ if(nx*cgx+ny*cgy<0){nx=-nx;ny=-ny}
+
+ const coherence=(lambda1-lambda2)/Math.max(1e-12,lambda1+lambda2);
+ return{nx,ny,coherence,lambda1,lambda2};
+}
+
+function analyze(x,y){
+ x=Math.max(1,Math.min(canvas.width-2,Math.round(x)));
+ y=Math.max(1,Math.min(canvas.height-2,Math.round(y)));
+
+ const snapped=findLocalEdgeMaximum(x,y,+controls.snapRadius.value);
+ const orientation=estimateNormalWithStructureTensor(
+   snapped.x,
+   snapped.y,
+   +controls.orientationRadius.value
+ );
+
+ if(!orientation){
+  setStatus("Ebben a környezetben nincs megbízható élirány.");
+  return;
+ }
+
+ const p={
+  x:snapped.x,
+  y:snapped.y,
+  nx:orientation.nx,
+  ny:orientation.ny,
+  coherence:orientation.coherence,
+  strength:normSobel(snapped.x,snapped.y)
+ };
+
+ p.neg=scan(p,-1);
+ p.pos=scan(p,1);
+ selection=p;
+
+ $("point").textContent=`(${p.x}, ${p.y})`;
+ $("sobelValue").textContent=`${(100*p.strength).toFixed(1)}%`;
+ $("normal").textContent=`(${p.nx.toFixed(3)}, ${p.ny.toFixed(3)})`;
+ $("coherence").textContent=`${(100*p.coherence).toFixed(1)}%`;
+ $("negR").textContent=`${p.neg.radius.toFixed(1)} px`;
+ $("posR").textContent=`${p.pos.radius.toFixed(1)} px`;
+ $("negD").textContent=`${p.neg.distance.toFixed(1)} px`;
+ $("posD").textContent=`${p.pos.distance.toFixed(1)} px`;
+
+ draw();
+ drawProfileChart();
+
+ if(p.coherence<.35){
+  setStatus("A becslés elkészült, de az élirány bizonytalan: több különböző irányú él van a környezetben.");
+ }else{
+  setStatus("A helyi élmaximumra igazított, környezeti normálbecslés elkészült.");
+ }
+}
+
 function scan(p,side){
  const min=+controls.minR.value,max=Math.max(min,+controls.maxR.value),step=+controls.step.value,half=+controls.strip.value;
  const nx=p.nx*side,ny=p.ny*side,tx=-p.ny,ty=p.nx,exclude=Math.max(2,min*.65),limit=2*max;
@@ -218,7 +347,7 @@ function drawProfileChart(){
   c.save();c.strokeStyle=color;c.setLineDash([3,3]);c.beginPath();c.moveTo(X(r),12);c.lineTo(X(r),h-22);c.stroke();c.restore();
  }
 }
-function clearStats(){for(const id of ["point","sobelValue","normal","negR","posR","negD","posD"])$(id).textContent="—"}
+function clearStats(){for(const id of ["point","sobelValue","normal","coherence","negR","posR","negD","posD"])$(id).textContent="—"}
 </script>
 </body>
 </html>

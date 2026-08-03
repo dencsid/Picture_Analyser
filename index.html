@@ -1822,7 +1822,7 @@ function generatePartialReconstruction(){
 
   const maxCandidateTests=Math.min(
     4000000,
-    Math.max(20000,requested*32)
+    Math.max(20000,requestedNewCircles*32)
   );
 
   let candidateTests=0;
@@ -1841,13 +1841,13 @@ function generatePartialReconstruction(){
   updateMetricDescription();
   updateEdgeControlsVisibility();
 
-  setStatus(`Homogén területeket előnyben részesítő körgenerálás: 0 / ${requested.toLocaleString()}…`);
+  setStatus(`Homogén területeket előnyben részesítő körgenerálás: 0 / ${requestedNewCircles.toLocaleString()}…`);
 
   const processChunk=()=>{
     const chunkStart=performance.now();
 
     while(
-      circles.length<requested &&
+      circles.length<targetTotalCircleCount &&
       candidateTests<maxCandidateTests &&
       performance.now()-chunkStart<28
     ){

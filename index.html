@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.16 M2 – fekete geometriai körök</title>
+<title>Picture Analyzer Lab V0.16/A M2 – javított 1. fázis</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -280,7 +280,7 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.16 M2 – fekete geometriai körök</h1>
+  <h1>Picture Analyzer Lab V0.16/A M2 – javított 1. fázis</h1>
   <p>M2: fekete geometriai külső körök, kisebb színes betétek; pontos külső és belső érintés.</p>
 </header>
 <main>
@@ -1719,11 +1719,13 @@ function generatePartialReconstruction(){
   if(!sourceImage||!analysis.cells.length)return;
   const limits=getPhysicalCircleLimits();if(!limits)return;
 
-  const requested=Number(reconstructionCircleCountInput.value);
+  const requestedNewCircles=Number(reconstructionCircleCountInput.value);
   const width=sourceImage.width,height=sourceImage.height;
   const circles=reconstructionCircles.filter(circle=>circle.phase===0);
+  const initialCircleCount=circles.length;
+  const targetTotalCircleCount=initialCircleCount+requestedNewCircles;
 
-  const seed=(width*73856093^height*19349663^requested*83492791)>>>0;
+  const seed=(width*73856093^height*19349663^requestedNewCircles*83492791)>>>0;
   const random=mulberry32(seed);
 
   const bucketSize=Math.max(8,Math.min(limits.maxRadius,Math.max(limits.minRadius*4,24)));
@@ -1885,11 +1887,11 @@ function generatePartialReconstruction(){
 
     setStatus(
       `Homogén területeket előnyben részesítő körgenerálás: `+
-      `${circles.length.toLocaleString()} / ${requested.toLocaleString()} `+
+      `${(circles.length-initialCircleCount).toLocaleString()} / ${requestedNewCircles.toLocaleString()} új kör; `+
       `(${candidateTests.toLocaleString()} vizsgált pont)…`
     );
 
-    if(circles.length<requested&&candidateTests<maxCandidateTests){
+    if(circles.length<targetTotalCircleCount&&candidateTests<maxCandidateTests){
       setTimeout(processChunk,0);
     }else{
       generateReconstructionButton.disabled=false;
@@ -1897,12 +1899,13 @@ function generatePartialReconstruction(){
       saveReconstructionPdfButton.disabled=circles.length===0;
       startAutomaticInnerPhaseButton.disabled=circles.length===0;
 
-      const reason=circles.length>=requested
+      const reason=circles.length>=targetTotalCircleCount
         ?"a kért körszám elérve"
         :"nem talált több, legalább minimális méretű szabad helyet";
 
       setStatus(
-        `${circles.length.toLocaleString()} kör elkészült; ${reason}. `+
+        `${(circles.length-initialCircleCount).toLocaleString()} új kitöltő kör készült; `+
+        `${circles.length.toLocaleString()} kör van összesen; ${reason}. `+
         `Az első körök a homogénebb területeket részesítették előnyben.`
       );
     }

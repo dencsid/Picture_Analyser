@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.14/A – javított 0. fázis indítás</title>
+<title>Picture Analyzer Lab V0.16 M2 – fekete geometriai körök</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -280,8 +280,8 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.14/A – javított 0. fázis indítás</h1>
-  <p>0. fázis: változó méretű, érintő körláncok az élek két oldalán. 1. fázis: a megmaradt területek kitöltése. 2. fázis: belső finomítás.</p>
+  <h1>Picture Analyzer Lab V0.16 M2 – fekete geometriai körök</h1>
+  <p>M2: fekete geometriai külső körök, kisebb színes betétek; pontos külső és belső érintés.</p>
 </header>
 <main>
 <section class="panel">
@@ -420,6 +420,16 @@ button {
       <label for="circleLayerOpacity"><span>Körréteg átlátszatlansága</span><span><span id="circleLayerOpacityValue">70</span>%</span></label>
       <input id="circleLayerOpacity" type="range" min="5" max="100" step="1" value="70">
       <div class="metric-note">A körréteg átlátszatlansága külön állítható.</div>
+    </div>
+    <div class="control">
+      <label for="circleBorderBaseWidth"><span>Fekete perem alapvastagsága</span><span><span id="circleBorderBaseWidthValue">0.40</span> px</span></label>
+      <input id="circleBorderBaseWidth" type="range" min="0.05" max="3" step="0.05" value="0.40">
+      <div class="metric-note">A perem két kitöltött kör különbsége, nem Canvas-körvonal. Módosításakor nem kell újragenerálni.</div>
+    </div>
+    <div class="control">
+      <label for="circleBorderExponent"><span>Perem méretfüggési hatványa</span><span id="circleBorderExponentValue">0.00</span></label>
+      <input id="circleBorderExponent" type="range" min="0" max="0.50" step="0.01" value="0">
+      <div class="metric-note">0 = minden körön azonos vastagság. Nagyobb érték = a nagyobb körök pereme enyhén vastagabb.</div>
     </div>
     <div class="row">
       <input id="showOriginalUnderCircles" type="checkbox" checked>
@@ -577,7 +587,7 @@ const corridorOpacityInput = $("corridorOpacity");
 const corridorOpacityValue = $("corridorOpacityValue");
 const splitCorridorSidesInput = $("splitCorridorSides");
 const combinedControls=$("combinedControls"),sobelWeightInput=$("sobelWeight"),sobelWeightValue=$("sobelWeightValue"),rgbSpreadWeightInput=$("rgbSpreadWeight"),rgbSpreadWeightValue=$("rgbSpreadWeightValue"),combinedFormula=$("combinedFormula");
-const reconstructionControls=$("reconstructionControls"),imageCategoryInput=$("imageCategory"),finalWidthCmInput=$("finalWidthCm"),finalHeightCmInput=$("finalHeightCm"),lockFinalAspectInput=$("lockFinalAspect"),minCircleDiameterMmInput=$("minCircleDiameterMm"),minCircleDiameterMmValue=$("minCircleDiameterMmValue"),maxCircleDiameterMmInput=$("maxCircleDiameterMm"),maxCircleDiameterMmValue=$("maxCircleDiameterMmValue"),reconstructionCircleCountInput=$("reconstructionCircleCount"),reconstructionCircleCountValue=$("reconstructionCircleCountValue"),edgeSkeletonCountInput=$("edgeSkeletonCount"),edgeSkeletonCountValue=$("edgeSkeletonCountValue"),edgeRadiusMethodInput=$("edgeRadiusMethod"),edgeSnapRadiusInput=$("edgeSnapRadius"),edgeSnapRadiusValue=$("edgeSnapRadiusValue"),edgeOrientationRadiusInput=$("edgeOrientationRadius"),edgeOrientationRadiusValue=$("edgeOrientationRadiusValue"),edgeMinimumCoherenceInput=$("edgeMinimumCoherence"),edgeMinimumCoherenceValue=$("edgeMinimumCoherenceValue"),circleLayerOpacityInput=$("circleLayerOpacity"),circleLayerOpacityValue=$("circleLayerOpacityValue"),showOriginalUnderCirclesInput=$("showOriginalUnderCircles"),physicalCircleInfo=$("physicalCircleInfo"),generateEdgeSkeletonButton=$("generateEdgeSkeleton"),generateReconstructionButton=$("generateReconstruction"),clearReconstructionButton=$("clearReconstruction"),saveReconstructionPdfButton=$("saveReconstructionPdf"),reconstructionCategoryStat=$("reconstructionCategoryStat"),placedCircleCountBox=$("placedCircleCount"),minimumRadiusStat=$("minimumRadiusStat"),maximumRadiusStat=$("maximumRadiusStat"),edgeSkeletonPlacedStat=$("edgeSkeletonPlacedStat"),edgeSkeletonComponentsStat=$("edgeSkeletonComponentsStat");
+const reconstructionControls=$("reconstructionControls"),imageCategoryInput=$("imageCategory"),finalWidthCmInput=$("finalWidthCm"),finalHeightCmInput=$("finalHeightCm"),lockFinalAspectInput=$("lockFinalAspect"),minCircleDiameterMmInput=$("minCircleDiameterMm"),minCircleDiameterMmValue=$("minCircleDiameterMmValue"),maxCircleDiameterMmInput=$("maxCircleDiameterMm"),maxCircleDiameterMmValue=$("maxCircleDiameterMmValue"),reconstructionCircleCountInput=$("reconstructionCircleCount"),reconstructionCircleCountValue=$("reconstructionCircleCountValue"),edgeSkeletonCountInput=$("edgeSkeletonCount"),edgeSkeletonCountValue=$("edgeSkeletonCountValue"),edgeRadiusMethodInput=$("edgeRadiusMethod"),edgeSnapRadiusInput=$("edgeSnapRadius"),edgeSnapRadiusValue=$("edgeSnapRadiusValue"),edgeOrientationRadiusInput=$("edgeOrientationRadius"),edgeOrientationRadiusValue=$("edgeOrientationRadiusValue"),edgeMinimumCoherenceInput=$("edgeMinimumCoherence"),edgeMinimumCoherenceValue=$("edgeMinimumCoherenceValue"),circleLayerOpacityInput=$("circleLayerOpacity"),circleLayerOpacityValue=$("circleLayerOpacityValue"),circleBorderBaseWidthInput=$("circleBorderBaseWidth"),circleBorderBaseWidthValue=$("circleBorderBaseWidthValue"),circleBorderExponentInput=$("circleBorderExponent"),circleBorderExponentValue=$("circleBorderExponentValue"),showOriginalUnderCirclesInput=$("showOriginalUnderCircles"),physicalCircleInfo=$("physicalCircleInfo"),generateEdgeSkeletonButton=$("generateEdgeSkeleton"),generateReconstructionButton=$("generateReconstruction"),clearReconstructionButton=$("clearReconstruction"),saveReconstructionPdfButton=$("saveReconstructionPdf"),reconstructionCategoryStat=$("reconstructionCategoryStat"),placedCircleCountBox=$("placedCircleCount"),minimumRadiusStat=$("minimumRadiusStat"),maximumRadiusStat=$("maximumRadiusStat"),edgeSkeletonPlacedStat=$("edgeSkeletonPlacedStat"),edgeSkeletonComponentsStat=$("edgeSkeletonComponentsStat");
 const detailChildControls=$("detailChildControls"),childRadiusPercentInput=$("childRadiusPercent"),childRadiusPercentValue=$("childRadiusPercentValue"),childDetailWeightInput=$("childDetailWeight"),childDetailWeightValue=$("childDetailWeightValue"),automaticInnerCircleCountInput=$("automaticInnerCircleCount"),automaticInnerCircleCountValue=$("automaticInnerCircleCountValue"),startAutomaticInnerPhaseButton=$("startAutomaticInnerPhase"),stopAutomaticInnerPhaseButton=$("stopAutomaticInnerPhase"),suggestChildCircleButton=$("suggestChildCircle"),acceptChildCircleButton=$("acceptChildCircle"),clearChildSuggestionButton=$("clearChildSuggestion"),selectedCircleStat=$("selectedCircleStat"),selectedCircleDetailStat=$("selectedCircleDetailStat"),childTangencyStat=$("childTangencyStat"),childCenterStat=$("childCenterStat"),childRadiusStat=$("childRadiusStat"),childColorStat=$("childColorStat");
 const radiusControls=$("radiusControls"),detailGammaInput=$("detailGamma"),detailGammaValue=$("detailGammaValue"),darkCandidatePercentInput=$("darkCandidatePercent"),darkCandidatePercentValue=$("darkCandidatePercentValue"),maxTestRadiusInput=$("maxTestRadius"),maxTestRadiusValue=$("maxTestRadiusValue"),radiusStepInput=$("radiusStep"),radiusStepValue=$("radiusStepValue"),ringWidthInput=$("ringWidth"),ringWidthValue=$("ringWidthValue"),ringThresholdInput=$("ringThreshold"),ringThresholdValue=$("ringThresholdValue"),jumpThresholdInput=$("jumpThreshold"),jumpThresholdValue=$("jumpThresholdValue"),manualRadiusInput=$("manualRadius"),manualRadiusValue=$("manualRadiusValue"),showSuggestedCircleInput=$("showSuggestedCircle"),fillFirstCircleInput=$("fillFirstCircle"),chooseDarkPointButton=$("chooseDarkPoint"),createFirstCircleButton=$("createFirstCircle"),clearRadiusTestButton=$("clearRadiusTest"),testCenterBox=$("testCenter"),currentRadiusStatBox=$("currentRadiusStat"),diskAverageBox=$("diskAverage"),ringAverageBox=$("ringAverage"),suggestedRadiusBox=$("suggestedRadius"),stopReasonBox=$("stopReason"),firstCircleColorBox=$("firstCircleColor"),radiusChart=$("radiusChart"),radiusChartCtx=radiusChart.getContext("2d");
 const edgeThresholdBox = $("edgeThreshold");
@@ -723,6 +733,14 @@ edgeSnapRadiusInput.addEventListener("input",()=>edgeSnapRadiusValue.textContent
 edgeOrientationRadiusInput.addEventListener("input",()=>edgeOrientationRadiusValue.textContent=edgeOrientationRadiusInput.value);
 edgeMinimumCoherenceInput.addEventListener("input",()=>edgeMinimumCoherenceValue.textContent=edgeMinimumCoherenceInput.value);
 circleLayerOpacityInput.addEventListener("input",()=>{circleLayerOpacityValue.textContent=circleLayerOpacityInput.value;scheduleDraw();});
+circleBorderBaseWidthInput.addEventListener("input",()=>{
+  circleBorderBaseWidthValue.textContent=Number(circleBorderBaseWidthInput.value).toFixed(2);
+  scheduleDraw();
+});
+circleBorderExponentInput.addEventListener("input",()=>{
+  circleBorderExponentValue.textContent=Number(circleBorderExponentInput.value).toFixed(2);
+  scheduleDraw();
+});
 showOriginalUnderCirclesInput.addEventListener("change",scheduleDraw);
 childRadiusPercentInput.addEventListener("input",()=>{childRadiusPercentValue.textContent=childRadiusPercentInput.value;if(selectedReconstructionCircle)suggestChildCircle();});
 childDetailWeightInput.addEventListener("input",()=>{childDetailWeightValue.textContent=childDetailWeightInput.value;if(selectedReconstructionCircle)suggestChildCircle();});
@@ -781,7 +799,7 @@ resetViewButton.addEventListener("click", () => {
   rgbSpreadWeightInput.value = 50;
   rgbSpreadWeightValue.textContent = "50";
   combinedFormula.textContent = "50% Sobel + 50% színszórás";
-  circleLayerOpacityInput.value=70;circleLayerOpacityValue.textContent="70";showOriginalUnderCirclesInput.checked=true;
+  circleLayerOpacityInput.value=70;circleLayerOpacityValue.textContent="70";circleBorderBaseWidthInput.value=.4;circleBorderBaseWidthValue.textContent="0.40";circleBorderExponentInput.value=0;circleBorderExponentValue.textContent="0.00";showOriginalUnderCirclesInput.checked=true;
   selectedReconstructionCircle=null;childCircleSuggestion=null;childPriorityCandidates=[];selectedChildPriorityPoint=null;updateChildCircleStats();
   updateMetricDescription();
   updateEdgeControlsVisibility();
@@ -1894,17 +1912,47 @@ function generatePartialReconstruction(){
 }
 
 
+
+function getCircleBorderWidth(radius){
+  const geometricRadius=Math.max(0,Number(radius)||0);
+  const baseWidth=Math.max(0,Number(circleBorderBaseWidthInput.value)||0);
+  const exponent=Math.max(0,Number(circleBorderExponentInput.value)||0);
+  const referenceRadius=10;
+
+  const calculated=baseWidth*Math.pow(
+    Math.max(1e-9,geometricRadius/referenceRadius),
+    exponent
+  );
+
+  // A színes betét egy nagyon kis körnél se tűnjön el teljesen.
+  return Math.max(0,Math.min(calculated,geometricRadius*.45));
+}
+
+function getCircleColorRadius(circleOrRadius){
+  const radius=typeof circleOrRadius==="number"
+    ?circleOrRadius
+    :Number(circleOrRadius?.radius)||0;
+
+  return Math.max(0,radius-getCircleBorderWidth(radius));
+}
+
 function findTopmostCircleContainingPoint(x,y){
   for(let i=reconstructionCircles.length-1;i>=0;i--){
     const circle=reconstructionCircles[i];
-    if(Math.hypot(x-circle.x,y-circle.y)<=circle.radius)return circle;
+    if(
+      Math.hypot(x-circle.x,y-circle.y)
+      <=getCircleColorRadius(circle)
+    )return circle;
   }
   return null;
 }
 
 function isAncestorCircle(circle,parent){
   if(circle===parent)return true;
-  return Math.hypot(circle.x-parent.x,circle.y-parent.y)+parent.radius<=circle.radius+1e-6;
+  return(
+    Math.hypot(circle.x-parent.x,circle.y-parent.y)+parent.radius
+    <=getCircleColorRadius(circle)+1e-6
+  );
 }
 
 function automaticInnerCandidate(parent,point,minRadius,maxRadius){
@@ -1920,15 +1968,27 @@ function automaticInnerCandidate(parent,point,minRadius,maxRadius){
   dx/=length;
   dy/=length;
 
+  const parentColorRadius=getCircleColorRadius(parent);
+  const effectiveMaximum=Math.min(
+    maxRadius,
+    Math.max(0,parentColorRadius-minRadius)
+  );
+
+  if(effectiveMaximum<minRadius)return null;
+
   const fits=radius=>{
-    const x=parent.x+dx*(parent.radius-radius);
-    const y=parent.y+dy*(parent.radius-radius);
+    // Belső érintés: szülő SZÍNES sugara ↔ gyermek FEKETE sugara.
+    const centerDistance=parentColorRadius-radius;
+    if(centerDistance<0)return false;
+
+    const x=parent.x+dx*centerDistance;
+    const y=parent.y+dy*centerDistance;
 
     for(const old of reconstructionCircles){
       if(isAncestorCircle(old,parent))continue;
       const distance=Math.hypot(x-old.x,y-old.y);
 
-      // Más már meglévő belső körrel nem fedhet át.
+      // Minden különálló gyermek között fekete ↔ fekete külső érintés.
       if(distance<radius+old.radius-1e-5)return false;
     }
     return true;
@@ -1937,7 +1997,7 @@ function automaticInnerCandidate(parent,point,minRadius,maxRadius){
   if(!fits(minRadius))return null;
 
   let low=minRadius;
-  let high=maxRadius;
+  let high=effectiveMaximum;
   for(let i=0;i<24;i++){
     const middle=(low+high)/2;
     if(fits(middle))low=middle;
@@ -1945,9 +2005,10 @@ function automaticInnerCandidate(parent,point,minRadius,maxRadius){
   }
 
   const radius=low;
-  const x=parent.x+dx*(parent.radius-radius);
-  const y=parent.y+dy*(parent.radius-radius);
-  const color=averageSourceColor(x,y,Math.max(1,radius));
+  const centerDistance=parentColorRadius-radius;
+  const x=parent.x+dx*centerDistance;
+  const y=parent.y+dy*centerDistance;
+  const color=averageSourceColor(x,y,Math.max(1,getCircleColorRadius(radius)));
 
   return {
     x,
@@ -2130,15 +2191,17 @@ function generateAutomaticInnerCircles(){
       if(point.rejected)continue;
 
       const parent=findTopmostCircleContainingPoint(point.x,point.y);
-      if(!parent||parent.radius<2*limits.minRadius){
+      const parentColorRadius=parent?getCircleColorRadius(parent):0;
+
+      if(!parent||parentColorRadius<2*limits.minRadius){
         point.rejected=true;
         continue;
       }
 
       const allowedMaximum=Math.min(
         limits.maxRadius,
-        parent.radius*.49,
-        parent.radius*Number(childRadiusPercentInput.value)/100
+        parentColorRadius*.49,
+        parentColorRadius*Number(childRadiusPercentInput.value)/100
       );
 
       if(allowedMaximum<limits.minRadius){
@@ -2252,8 +2315,21 @@ function drawPartialReconstruction(){
 
   ctx.globalAlpha=Number(circleLayerOpacityInput.value)/100;
   for(const circle of reconstructionCircles){
-    ctx.fillStyle=`rgb(${circle.color.r},${circle.color.g},${circle.color.b})`;
-    ctx.beginPath();ctx.arc(circle.x,circle.y,circle.radius,0,Math.PI*2);ctx.fill();
+    const colorRadius=getCircleColorRadius(circle);
+
+    // Fekete geometriai külső kör: minden érintési számítás ezt használja.
+    ctx.fillStyle="#000000";
+    ctx.beginPath();
+    ctx.arc(circle.x,circle.y,circle.radius,0,Math.PI*2);
+    ctx.fill();
+
+    // Kisebb színes betét: kizárólag megjelenítés.
+    if(colorRadius>0){
+      ctx.fillStyle=`rgb(${circle.color.r},${circle.color.g},${circle.color.b})`;
+      ctx.beginPath();
+      ctx.arc(circle.x,circle.y,colorRadius,0,Math.PI*2);
+      ctx.fill();
+    }
   }
   ctx.globalAlpha=1;
   if(selectedReconstructionCircle){
@@ -2262,7 +2338,13 @@ function drawPartialReconstruction(){
   if(selectedReconstructionCircle&&childPriorityCandidates.length){
     ctx.save();
     ctx.beginPath();
-    ctx.arc(selectedReconstructionCircle.x,selectedReconstructionCircle.y,selectedReconstructionCircle.radius,0,Math.PI*2);
+    ctx.arc(
+      selectedReconstructionCircle.x,
+      selectedReconstructionCircle.y,
+      getCircleColorRadius(selectedReconstructionCircle),
+      0,
+      Math.PI*2
+    );
     ctx.clip();
     for(const point of childPriorityCandidates){
       const alpha=.18+.58*point.normalizedPriority;
@@ -2298,7 +2380,26 @@ function drawPartialReconstruction(){
     ctx.restore();
   }
   if(childCircleSuggestion){
-    ctx.save();ctx.globalAlpha=.82;ctx.fillStyle=`rgb(${childCircleSuggestion.color.r},${childCircleSuggestion.color.g},${childCircleSuggestion.color.b})`;ctx.beginPath();ctx.arc(childCircleSuggestion.x,childCircleSuggestion.y,childCircleSuggestion.radius,0,Math.PI*2);ctx.fill();ctx.globalAlpha=1;ctx.strokeStyle="yellow";ctx.lineWidth=Math.max(2,childCircleSuggestion.radius*.04);ctx.beginPath();ctx.arc(childCircleSuggestion.x,childCircleSuggestion.y,childCircleSuggestion.radius,0,Math.PI*2);ctx.stroke();ctx.restore();
+    ctx.save();
+    const suggestionColorRadius=getCircleColorRadius(childCircleSuggestion);
+    ctx.globalAlpha=.82;
+    ctx.fillStyle="#000";
+    ctx.beginPath();
+    ctx.arc(childCircleSuggestion.x,childCircleSuggestion.y,childCircleSuggestion.radius,0,Math.PI*2);
+    ctx.fill();
+    if(suggestionColorRadius>0){
+      ctx.fillStyle=`rgb(${childCircleSuggestion.color.r},${childCircleSuggestion.color.g},${childCircleSuggestion.color.b})`;
+      ctx.beginPath();
+      ctx.arc(childCircleSuggestion.x,childCircleSuggestion.y,suggestionColorRadius,0,Math.PI*2);
+      ctx.fill();
+    }
+    ctx.globalAlpha=1;
+    ctx.strokeStyle="yellow";
+    ctx.lineWidth=Math.max(2,childCircleSuggestion.radius*.04);
+    ctx.beginPath();
+    ctx.arc(childCircleSuggestion.x,childCircleSuggestion.y,childCircleSuggestion.radius,0,Math.PI*2);
+    ctx.stroke();
+    ctx.restore();
   }
   ctx.restore();
 }
@@ -2356,14 +2457,15 @@ function chooseWeightedPriorityPoint(points){
 function buildChildPriorityCandidates(parent,minChild){
   const detailWeight=Number(childDetailWeightInput.value)/100;
   const parentColor=parent.color;
-  const step=Math.max(2,Math.floor(parent.radius/18));
+  const parentColorRadius=getCircleColorRadius(parent);
+  const step=Math.max(2,Math.floor(parentColorRadius/18));
   const margin=Math.max(1,minChild*.35);
   const raw=[];
   let maximum=0;
 
-  for(let y=parent.y-parent.radius+margin;y<=parent.y+parent.radius-margin;y+=step){
-    for(let x=parent.x-parent.radius+margin;x<=parent.x+parent.radius-margin;x+=step){
-      if((x-parent.x)**2+(y-parent.y)**2>(parent.radius-margin)**2)continue;
+  for(let y=parent.y-parentColorRadius+margin;y<=parent.y+parentColorRadius-margin;y+=step){
+    for(let x=parent.x-parentColorRadius+margin;x<=parent.x+parentColorRadius-margin;x+=step){
+      if((x-parent.x)**2+(y-parent.y)**2>(parentColorRadius-margin)**2)continue;
       const detail=combinedDetailAtPixel(x,y);
       const contrast=colorDistance(sourceColorAt(x,y),parentColor);
       const priority=detailWeight*detail+(1-detailWeight)*contrast;
@@ -2388,7 +2490,12 @@ function buildChildPriorityCandidates(parent,minChild){
 function suggestChildCircle(){
   const parent=selectedReconstructionCircle;if(!parent)return;
   const limits=getPhysicalCircleLimits();if(!limits)return;
-  const maxChild=Math.min(parent.radius*.49,parent.radius*Number(childRadiusPercentInput.value)/100,limits.maxRadius);
+  const parentColorRadius=getCircleColorRadius(parent);
+  const maxChild=Math.min(
+    parentColorRadius*.49,
+    parentColorRadius*Number(childRadiusPercentInput.value)/100,
+    limits.maxRadius
+  );
   const minChild=limits.minRadius;
 
   childCircleSuggestion=null;
@@ -2424,7 +2531,8 @@ function suggestChildCircle(){
   for(let i=0;i<radiusSteps;i++){
     const t=i/(radiusSteps-1);
     const radius=maxChild-(maxChild-minChild)*t;
-    const distance=parent.radius-radius;
+    // Belső érintés a szülő színes belső köréhez.
+    const distance=parentColorRadius-radius;
     const x=parent.x+dx*distance;
     const y=parent.y+dy*distance;
     const candidate={x,y,radius};
@@ -2530,18 +2638,29 @@ function saveReconstructionPdf(){
     const offsetX=(pageW-sourceImage.width*scale)/2,offsetY=(pageH-sourceImage.height*scale)/2;
     let art=`1 1 1 rg\n0 0 ${pageW.toFixed(3)} ${pageH.toFixed(3)} re f\n`;
     for(const c of reconstructionCircles){
-      const x=offsetX+c.x*scale,y=pageH-(offsetY+c.y*scale),r=c.radius*scale;
+      const x=offsetX+c.x*scale;
+      const y=pageH-(offsetY+c.y*scale);
+      const outerRadius=c.radius*scale;
+      const colorRadius=getCircleColorRadius(c)*scale;
       const red=safePdfColorComponent(c.color?.r);
       const green=safePdfColorComponent(c.color?.g);
       const blue=safePdfColorComponent(c.color?.b);
-      art+=`${red.toFixed(4)} ${green.toFixed(4)} ${blue.toFixed(4)} rg\n`;
-      art+=circlePdfPath(x,y,r)+"f\n";
+
+      // Fekete geometriai külső kör.
+      art+="0 0 0 rg\n";
+      art+=circlePdfPath(x,y,outerRadius)+"f\n";
+
+      // Színes belső betét.
+      if(colorRadius>0){
+        art+=`${red.toFixed(4)} ${green.toFixed(4)} ${blue.toFixed(4)} rg\n`;
+        art+=circlePdfPath(x,y,colorRadius)+"f\n";
+      }
     }
     const a4w=595.276,a4h=841.89;
     const category=imageCategoryInput.options[imageCategoryInput.selectedIndex].text;
     const date=new Date().toLocaleString("hu-HU");
     const lines=[
-      "Picture Analyzer Lab V0.12 - kiválasztott kör részletvizsgálata",
+      "Picture Analyzer Lab V0.16 M2 - fekete geometriai körök",
       `Forrasfajl: ${fileNameBox.textContent}`,
       `Kategoria: ${category}`,
       `Vegleges meret: ${finalWidthCmInput.value} x ${finalHeightCmInput.value} cm`,
@@ -2551,7 +2670,7 @@ function saveReconstructionPdf(){
       `RGB szorodas suly: ${rgbSpreadWeightInput.value}%`,
       `Racsmeret az elemzeshez: ${gridSizeInput.value} px`,
       `Datum: ${date}`,
-      "Megjegyzes: a PDF korvonal nelkuli vektoros koroket tartalmaz."
+      "Megjegyzes: minden kor fekete geometriai kulso korbol es kisebb szines betetbol all."
     ];
     let info="BT\n/F1 16 Tf\n50 790 Td\n";
     lines.forEach((line,i)=>{if(i===1)info+="/F1 11 Tf\n";if(i)info+="0 -28 Td\n";info+=`(${pdfEscape(line)}) Tj\n`;});
@@ -2564,12 +2683,12 @@ function saveReconstructionPdf(){
     objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${a4w} ${a4h}] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>`);
     objects.push(`<< /Length ${info.length} >>\nstream\n${info}endstream`);
     objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-    objects.push(`<< /Title (${pdfEscape("Picture Analyzer Lab V0.12")}) /Subject (${pdfEscape("Kivalasztott kor reszletvizsgalata")}) /Creator (${pdfEscape("Picture Analyzer Lab")}) >>`);
+    objects.push(`<< /Title (${pdfEscape("Picture Analyzer Lab V0.16 M2")}) /Subject (${pdfEscape("Fekete geometriai korok es szines betetek")}) /Creator (${pdfEscape("Picture Analyzer Lab")}) >>`);
     const blob=buildPdf(objects,1,8);
     const link=document.createElement("a");
     link.href=URL.createObjectURL(blob);
     const base=(fileNameBox.textContent||"korrekonstrukcio").replace(/\.[^.]+$/,"").replace(/[^\w.-]+/g,"_");
-    link.download=`${base}_Picture_Analyzer_V0.12.pdf`;
+    link.download=`${base}_Picture_Analyzer_V0.16_M2.pdf`;
     document.body.appendChild(link);link.click();link.remove();
     setTimeout(()=>URL.revokeObjectURL(link.href),1000);
     setStatus("A vektoros PDF elkészült és letöltődött.");

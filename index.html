@@ -1854,6 +1854,16 @@ function generateEdgeSkeleton(){
         let radius=estimatedRadii[String(side)];
         const parent=parents[String(side)];
 
+        /*
+          Csak akkor törjük meg a szabályos körláncot, ha az
+          éltérképes sugárbecslés a megengedett maximumot adta.
+          A csökkentett sugárral a createCircle() számítja ki újra
+          az érintéshez tartozó középpontot.
+        */
+        if(radius>=limits.maxRadius-1e-9){
+          radius*=.7+Math.random()*.2;
+        }
+
         if(parent){
           radius=Math.max(
             limits.minRadius,
@@ -1983,24 +1993,11 @@ function generatePartialReconstruction(){
   const buckets=new Map();
   const key=(bx,by)=>`${bx},${by}`;
 
-  /*
-    A kör nemcsak a középpontja vödrébe kerül, hanem minden olyan
-    vödörbe, amelyet a geometriai befoglaló négyzete érint.
-  */
   const insert=c=>{
-    const minBx=Math.floor((c.x-c.radius)/bucketSize);
-    const maxBx=Math.floor((c.x+c.radius)/bucketSize);
-    const minBy=Math.floor((c.y-c.radius)/bucketSize);
-    const maxBy=Math.floor((c.y+c.radius)/bucketSize);
-
-    for(let by=minBy;by<=maxBy;by++){
-      for(let bx=minBx;bx<=maxBx;bx++){
-        const k=key(bx,by);
-        let list=buckets.get(k);
-        if(!list)buckets.set(k,list=[]);
-        list.push(c);
-      }
-    }
+    const k=key(Math.floor(c.x/bucketSize),Math.floor(c.y/bucketSize));
+    let list=buckets.get(k);
+    if(!list)buckets.set(k,list=[]);
+    list.push(c);
   };
   for(const existing of circles)insert(existing);
 
@@ -2013,25 +2010,22 @@ function generatePartialReconstruction(){
     );
     if(clearance<limits.minRadius)return null;
 
-    const minBx=Math.floor((x-clearance)/bucketSize);
-    const maxBx=Math.floor((x+clearance)/bucketSize);
-    const minBy=Math.floor((y-clearance)/bucketSize);
-    const maxBy=Math.floor((y+clearance)/bucketSize);
-    const nearby=new Set();
+    const bx=Math.floor(x/bucketSize);
+    const by=Math.floor(y/bucketSize);
+    const reach=Math.ceil((limits.maxRadius+clearance)/bucketSize);
 
-    for(let by=minBy;by<=maxBy;by++){
-      for(let bx=minBx;bx<=maxBx;bx++){
-        const list=buckets.get(key(bx,by));
+    for(let yy=by-reach;yy<=by+reach&&clearance>=limits.minRadius;yy++){
+      for(let xx=bx-reach;xx<=bx+reach&&clearance>=limits.minRadius;xx++){
+        const list=buckets.get(key(xx,yy));
         if(!list)continue;
-        for(const old of list)nearby.add(old);
+        for(const old of list){
+          const freeDistance=Math.hypot(x-old.x,y-old.y)-old.radius;
+          if(freeDistance<clearance)clearance=freeDistance;
+          if(clearance<limits.minRadius)break;
+        }
       }
     }
-
-    for(const old of nearby){
-      const freeDistance=Math.hypot(x-old.x,y-old.y)-old.radius;
-      if(freeDistance<clearance)clearance=freeDistance;
-      if(clearance<limits.minRadius)return null;
-    }
+    if(clearance<limits.minRadius)return null;
 
     const radius=Math.min(limits.maxRadius,clearance);
     const detail=Math.max(0,Math.min(1,cell.combinedDetail));
@@ -2141,27 +2135,6 @@ function generatePartialReconstruction(){
   };
 
   const addCircle=best=>{
-    const minBx=Math.floor((best.x-best.radius)/bucketSize);
-    const maxBx=Math.floor((best.x+best.radius)/bucketSize);
-    const minBy=Math.floor((best.y-best.radius)/bucketSize);
-    const maxBy=Math.floor((best.y+best.radius)/bucketSize);
-    const nearby=new Set();
-
-    for(let by=minBy;by<=maxBy;by++){
-      for(let bx=minBx;bx<=maxBx;bx++){
-        const list=buckets.get(key(bx,by));
-        if(!list)continue;
-        for(const old of list)nearby.add(old);
-      }
-    }
-
-    for(const old of nearby){
-      if(
-        Math.hypot(best.x-old.x,best.y-old.y)
-        <best.radius+old.radius-1e-6
-      )return false;
-    }
-
     const circle={
       x:best.x,
       y:best.y,
@@ -2173,7 +2146,6 @@ function generatePartialReconstruction(){
     circles.push(circle);
     insert(circle);
     consecutiveFailedBatches=0;
-    return true;
   };
 
   const processChunk=()=>{
@@ -2197,10 +2169,7 @@ function generatePartialReconstruction(){
         }
       }
 
-      if(best&&!addCircle(best)){
-        failedBatches++;
-        consecutiveFailedBatches++;
-      }
+      if(best)addCircle(best);
     }
 
     reconstructionCircles=circles;

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Görbekövető érintő körlánc labor V0.8 – interaktív görbevágás</title>
+<title>Görbekövető érintő körlánc labor V0.9 – nagyítás, pásztázás, globális koordináták</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;font-family:Arial,Helvetica,sans-serif;background:#ddd;color:#222}
@@ -46,7 +46,7 @@ button.curve-reject{background:#9b3b35}
 </head>
 <body>
 <header>
-<h1>Görbekövető érintő körlánc labor V0.8 – interaktív görbevágás</h1>
+<h1>Görbekövető érintő körlánc labor V0.9 – nagyítás, pásztázás, globális koordináták</h1>
 <p>Görbejavaslat → görbe elfogadása → kezdőpont → négyirányú körlánc-előnézet → elfogadás.</p>
 </header>
 
@@ -62,6 +62,13 @@ button.curve-reject{background:#9b3b35}
 3. A vágás szükség esetén többször ismételhető, majd fogadd el vagy vesd el a görbét.<br>
 4. Elfogadás után jelöld ki a kezdőpontot, válassz a négy nyíl közül, majd készítsd el a körláncot.
 </div>
+
+
+<div class="control">
+<label>Nagyítás <span><span id="zoomV">—</span>%</span></label>
+<input id="zoom" type="range" min="10" max="100" value="100" step="1" disabled>
+</div>
+<div class="row"><b>Nézet:</b>&nbsp; egérgörgő = zoom, jobb gomb + húzás = pásztázás</div>
 
 <div class="control"><label>Körök száma <span id="countV"></span></label><input id="count" type="range" min="1" max="60" value="12"></div>
 <div class="control"><label>Alapsugár <span><span id="baseV"></span> px</span></label><input id="base" type="range" min="2" max="90" value="18"></div>
@@ -117,6 +124,21 @@ button.curve-reject{background:#9b3b35}
 <div><b>Kezdő élpont:</b> <span id="startPoint">—</span></div>
 </div>
 
+<div class="box">
+<div><b>Diagnosztika</b></div>
+<div class="quality-grid">
+<span>Kért körök:</span><span id="diagRequested">—</span>
+<span>Elkészült körök:</span><span id="diagPlaced">—</span>
+<span>Első sikertelen kör:</span><span id="diagFailedIndex">—</span>
+<span>Megállás oka:</span><span id="diagStopReason">—</span>
+<span>Próbált sugár:</span><span id="diagRadius">—</span>
+<span>Előző sugár:</span><span id="diagPrevRadius">—</span>
+<span>Előző ívhosszhely:</span><span id="diagPrevS">—</span>
+<span>Hátralévő ívhossz:</span><span id="diagRemaining">—</span>
+<span>Gyökkeresés:</span><span id="diagRoot">—</span>
+</div>
+</div>
+
 <div class="note">
 Az elfogadott körök zároltak. Új kör csak akkor kerülhet az előnézetbe, ha nem metszi az összes korábban elfogadott kört és a saját láncának nem szomszédos köreit. A gyorsítást négyzetes térbeli rács végzi.
 </div>
@@ -154,6 +176,16 @@ const curveMinimumBox=$("curveMinimum");
 const curveGapBox=$("curveGap");
 const curveLeftStopBox=$("curveLeftStop");
 const curveRightStopBox=$("curveRightStop");
+const diagRequestedBox=$("diagRequested");
+const diagPlacedBox=$("diagPlaced");
+const diagFailedIndexBox=$("diagFailedIndex");
+const diagStopReasonBox=$("diagStopReason");
+const diagRadiusBox=$("diagRadius");
+const diagPrevRadiusBox=$("diagPrevRadius");
+const diagPrevSBox=$("diagPrevS");
+const diagRemainingBox=$("diagRemaining");
+const diagRootBox=$("diagRoot");
+const zoomValueBox=$("zoomV");
 
 const valueBoxes={
  count:$("countV"),base:$("baseV"),irr:$("irrV"),freq:$("freqV"),
@@ -165,13 +197,25 @@ const src=document.createElement("canvas");
 const sx=src.getContext("2d",{willReadFrequently:true});
 
 const ctl={
- count:$("count"),base:$("base"),irr:$("irr"),freq:$("freq"),smooth:$("smooth"),
+ zoom:$("zoom"),count:$("count"),base:$("base"),irr:$("irr"),freq:$("freq"),smooth:$("smooth"),
  minR:$("minR"),maxR:$("maxR"),snap:$("snap"),step:$("step"),
  edgeSmooth:$("edgeSmooth"),border:$("border"),opacity:$("opacity"),
  showCenters:$("showCenters"),showEdge:$("showEdge")
 };
 
 let imgData=null,gray=null,sobel=null,gx=null,gy=null;
+
+let sourceImage=null;
+let sourceWidth=0,sourceHeight=0;
+let fitScale=1;
+let viewScale=1;
+let viewCenterX=canvas.width/2;
+let viewCenterY=canvas.height/2;
+let rasterAnalysisDirty=false;
+
+let isPanning=false;
+let panStartScreen=null;
+let panStartCenter=null;
 
 let acceptedChains=[];
 let acceptedGrid=new Map();
@@ -183,6 +227,17 @@ let arrowChoices=[];
 let chosenDirection=null;
 let previewCircles=[];
 let previewStopReason="";
+let lastFindDiagnostic=null;
+let generationDiagnostic={
+ requested:null,
+ placed:0,
+ failedIndex:null,
+ stopReason:"",
+ triedRadius:null,
+ previousRadius:null,
+ previousS:null,
+ remaining:null
+};
 let seed=(Math.random()*4294967296)>>>0;
 
 const rnd=()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296);
@@ -190,6 +245,11 @@ const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 function labels(){
+ if(sourceImage){
+  zoomValueBox.textContent=Math.round(viewScale*100);
+ }else{
+  zoomValueBox.textContent="—";
+ }
  valueBoxes.count.textContent=ctl.count.value;
  valueBoxes.base.textContent=ctl.base.value;
  valueBoxes.irr.textContent=ctl.irr.value;
@@ -204,6 +264,134 @@ function labels(){
  valueBoxes.opacity.textContent=ctl.opacity.value;
 }
 
+
+function globalToScreen(point){
+ return{
+  x:(point.x-viewCenterX)*viewScale+canvas.width/2,
+  y:(point.y-viewCenterY)*viewScale+canvas.height/2
+ };
+}
+
+function screenToGlobal(point){
+ return{
+  x:(point.x-canvas.width/2)/viewScale+viewCenterX,
+  y:(point.y-canvas.height/2)/viewScale+viewCenterY
+ };
+}
+
+function clampViewCenter(){
+ if(!sourceImage)return;
+
+ const halfW=canvas.width/(2*viewScale);
+ const halfH=canvas.height/(2*viewScale);
+
+ if(sourceWidth<=2*halfW)viewCenterX=sourceWidth/2;
+ else viewCenterX=clamp(viewCenterX,halfW,sourceWidth-halfW);
+
+ if(sourceHeight<=2*halfH)viewCenterY=sourceHeight/2;
+ else viewCenterY=clamp(viewCenterY,halfH,sourceHeight-halfH);
+}
+
+function updateZoomControl(){
+ if(!sourceImage){
+  ctl.zoom.disabled=true;
+  zoomValueBox.textContent="—";
+  return;
+ }
+
+ const minPercent=Math.max(1,Math.round(fitScale*100));
+ const maxScale=Math.max(fitScale,1);
+ const maxPercent=Math.max(minPercent,Math.round(maxScale*100));
+
+ ctl.zoom.min=String(minPercent);
+ ctl.zoom.max=String(maxPercent);
+ ctl.zoom.value=String(Math.round(viewScale*100));
+ ctl.zoom.disabled=maxPercent<=minPercent;
+ zoomValueBox.textContent=Math.round(viewScale*100);
+}
+
+function renderViewportImage(){
+ if(!sourceImage)return;
+
+ sx.setTransform(1,0,0,1,0,0);
+ sx.clearRect(0,0,src.width,src.height);
+ sx.fillStyle="#fff";
+ sx.fillRect(0,0,src.width,src.height);
+
+ sx.setTransform(
+  viewScale,0,0,viewScale,
+  canvas.width/2-viewCenterX*viewScale,
+  canvas.height/2-viewCenterY*viewScale
+ );
+ sx.drawImage(sourceImage,0,0);
+ sx.setTransform(1,0,0,1,0,0);
+
+ rasterAnalysisDirty=true;
+ draw();
+}
+
+function rebuildRasterAnalysis(){
+ if(!sourceImage)return;
+ imgData=sx.getImageData(0,0,src.width,src.height);
+ buildSobel();
+ rasterAnalysisDirty=false;
+}
+
+function ensureRasterAnalysis(){
+ if(rasterAnalysisDirty)rebuildRasterAnalysis();
+}
+
+function setViewScale(newScale,anchorScreen=null){
+ if(!sourceImage)return;
+
+ const maxScale=Math.max(fitScale,1);
+ newScale=clamp(newScale,fitScale,maxScale);
+
+ let anchorGlobal=null;
+ if(anchorScreen)anchorGlobal=screenToGlobal(anchorScreen);
+
+ viewScale=newScale;
+
+ if(anchorScreen&&anchorGlobal){
+  viewCenterX=anchorGlobal.x-(anchorScreen.x-canvas.width/2)/viewScale;
+  viewCenterY=anchorGlobal.y-(anchorScreen.y-canvas.height/2)/viewScale;
+ }
+
+ clampViewCenter();
+ updateZoomControl();
+
+ if(selectedStart&&!chosenDirection)makeArrowChoices();
+
+ renderViewportImage();
+ labels();
+}
+
+function localCurveToGlobal(curve){
+ if(!curve)return curve;
+
+ const converted={...curve};
+
+ if(curve.rawPoints){
+  converted.rawPoints=curve.rawPoints.map(screenToGlobal);
+ }
+ if(curve.points){
+  converted.points=curve.points.map(screenToGlobal);
+ }
+ if(curve.sourceClick){
+  converted.sourceClick=screenToGlobal(curve.sourceClick);
+ }
+
+ return converted;
+}
+
+function screenEventPoint(event){
+ const rect=canvas.getBoundingClientRect();
+ return{
+  x:(event.clientX-rect.left)*canvas.width/rect.width,
+  y:(event.clientY-rect.top)*canvas.height/rect.height
+ };
+}
+
 function totalAcceptedCircles(){
  return acceptedChains.reduce((sum,chain)=>sum+chain.circles.length,0);
 }
@@ -214,11 +402,11 @@ function updateButtons(){
 
  acceptCurveButton.disabled=!curvePending;
  rejectCurveButton.disabled=!curvePending;
- newEdgeButton.disabled=!imgData;
+ newEdgeButton.disabled=!sourceImage;
  regenerateButton.disabled=!chosenDirection;
  acceptButton.disabled=previewCircles.length===0;
  rejectButton.disabled=!chosenDirection&&previewCircles.length===0;
- clearButton.disabled=!imgData&&acceptedChains.length===0;
+ clearButton.disabled=!sourceImage&&acceptedChains.length===0;
  canvas.style.cursor="crosshair";
 }
 
@@ -229,6 +417,22 @@ function stats(){
  errorBox.textContent=previewCircles.length>1?maxTangencyError(previewCircles).toFixed(6)+" px":"—";
  startPointBox.textContent=selectedStart
   ?`${selectedStart.point.x.toFixed(1)}, ${selectedStart.point.y.toFixed(1)}`
+  :"—";
+
+ diagRequestedBox.textContent=generationDiagnostic.requested??"—";
+ diagPlacedBox.textContent=generationDiagnostic.placed??"—";
+ diagFailedIndexBox.textContent=generationDiagnostic.failedIndex??"—";
+ diagStopReasonBox.textContent=generationDiagnostic.stopReason||"—";
+ diagRadiusBox.textContent=Number.isFinite(generationDiagnostic.triedRadius)
+  ?generationDiagnostic.triedRadius.toFixed(3)+" px":"—";
+ diagPrevRadiusBox.textContent=Number.isFinite(generationDiagnostic.previousRadius)
+  ?generationDiagnostic.previousRadius.toFixed(3)+" px":"—";
+ diagPrevSBox.textContent=Number.isFinite(generationDiagnostic.previousS)
+  ?generationDiagnostic.previousS.toFixed(3)+" px":"—";
+ diagRemainingBox.textContent=Number.isFinite(generationDiagnostic.remaining)
+  ?generationDiagnostic.remaining.toFixed(3)+" px":"—";
+ diagRootBox.textContent=lastFindDiagnostic
+  ?`${lastFindDiagnostic.stage}: ${lastFindDiagnostic.detail}`
   :"—";
 
  if(candidateCurve){
@@ -265,24 +469,29 @@ imageInput.addEventListener("change",()=>{
    try{
     src.width=canvas.width;
     src.height=canvas.height;
-    sx.clearRect(0,0,src.width,src.height);
-    sx.fillStyle="#fff";
-    sx.fillRect(0,0,src.width,src.height);
 
-    const scale=Math.min(src.width/image.naturalWidth,src.height/image.naturalHeight);
-    const width=image.naturalWidth*scale;
-    const height=image.naturalHeight*scale;
-    sx.drawImage(image,(src.width-width)/2,(src.height-height)/2,width,height);
+    sourceImage=image;
+    sourceWidth=image.naturalWidth;
+    sourceHeight=image.naturalHeight;
 
-    imgData=sx.getImageData(0,0,src.width,src.height);
-    buildSobel();
+    fitScale=Math.min(canvas.width/sourceWidth,canvas.height/sourceHeight);
+    viewScale=fitScale;
+    viewCenterX=sourceWidth/2;
+    viewCenterY=sourceHeight/2;
+    clampViewCenter();
+    updateZoomControl();
 
     acceptedChains=[];
     rebuildAcceptedGrid();
     resetSelection();
 
+    renderViewportImage();
+    rebuildRasterAnalysis();
+
     statusBox.textContent=
-     `Kép betöltve: ${image.naturalWidth} × ${image.naturalHeight} px. Kattints egy él közelébe.`;
+     `Kép betöltve: ${sourceWidth} × ${sourceHeight} px. `+
+     `Kezdő nagyítás: ${Math.round(viewScale*100)}%. `+
+     "Egérgörgővel nagyíthatsz, jobb gombbal húzva mozgathatod a látómezőt.";
 
     stats();
     draw();
@@ -618,7 +827,7 @@ function trimCandidateCurveAt(point){
  }
 
  const nearest=nearestEdgeIndex(candidateCurve,point);
- const tolerance=Math.max(14,+ctl.snap.value*1.5);
+ const tolerance=Math.max(14,+ctl.snap.value*1.5)/viewScale;
  if(nearest.distance>tolerance)return false;
 
  const oldCount=candidateCurve.points.length;
@@ -702,7 +911,7 @@ function makeArrowChoices(){
   candidateCurve.closed
  );
  const normal={x:-tangent.y,y:tangent.x};
- const arrowDistance=42;
+ const arrowDistance=42/viewScale;
 
  for(const direction of [-1,1]){
   for(const normalSide of [-1,1]){
@@ -847,19 +1056,39 @@ function nextRadius(previousRadius){
 
 function findNextCircle(model,previous,radius){
  const startS=previous.s+1e-4;
- if(startS>=model.total)return null;
+
+ lastFindDiagnostic={
+  stage:"start",
+  detail:`startS=${startS.toFixed(6)}, total=${model.total.toFixed(6)}`
+ };
+
+ if(startS>=model.total){
+  lastFindDiagnostic={
+   stage:"curveEnd",
+   detail:"Az előző kör érintési helye már a görbe végén van."
+  };
+  return null;
+ }
 
  const functionValue=s=>touchError(previous,circleAtArc(model,s,radius));
 
  let leftS=startS;
  let leftValue=functionValue(leftS);
 
+ lastFindDiagnostic={
+  stage:"leftStart",
+  detail:`f=${leftValue.toFixed(6)} @ s=${leftS.toFixed(6)}`
+ };
+
  if(leftValue>=0){
   let foundNegative=false;
+
   for(let k=1;k<=20;k++){
    const s=startS+k*.05;
    if(s>=model.total)break;
+
    const value=functionValue(s);
+
    if(value<0){
     leftS=s;
     leftValue=value;
@@ -867,24 +1096,40 @@ function findNextCircle(model,previous,radius){
     break;
    }
   }
-  if(!foundNegative)return null;
+
+  if(!foundNegative){
+   lastFindDiagnostic={
+    stage:"noNegativeBracket",
+    detail:"A kezdőpont közelében 20×0,05 px előrelépéssel sem lett f(s)<0."
+   };
+   return null;
+  }
  }
 
  const scanStep=Math.max(.25,Math.min(2,+ctl.step.value*.5));
  let rightS=leftS;
  let rightValue=leftValue;
  let bracketed=false;
+ let scanCount=0;
 
  while(rightS<model.total){
   rightS=Math.min(model.total,rightS+scanStep);
   rightValue=functionValue(rightS);
+  scanCount++;
+
   if(rightValue>=0){
    bracketed=true;
    break;
   }
  }
 
- if(!bracketed)return null;
+ if(!bracketed){
+  lastFindDiagnostic={
+   stage:"noPositiveBracket",
+   detail:`Nem lett f(s)≥0 a görbe végéig. scan=${scanCount}, utolsó f=${rightValue.toFixed(6)}`
+  };
+  return null;
+ }
 
  for(let iteration=0;iteration<60;iteration++){
   const middleS=(leftS+rightS)/2;
@@ -899,8 +1144,16 @@ function findNextCircle(model,previous,radius){
   }
  }
 
- const circle=circleAtArc(model,(leftS+rightS)/2,radius);
- return Math.abs(touchError(previous,circle))<=1e-7?circle:null;
+ const rootS=(leftS+rightS)/2;
+ const circle=circleAtArc(model,rootS,radius);
+ const error=Math.abs(touchError(previous,circle));
+
+ lastFindDiagnostic={
+  stage:error<=1e-7?"rootOK":"rootRejected",
+  detail:`s=${rootS.toFixed(6)}, hiba=${error.toExponential(3)}, scan=${scanCount}`
+ };
+
+ return error<=1e-7?circle:null;
 }
 
 function cellKey(x,y){
@@ -985,6 +1238,18 @@ function generatePreview(){
  const minRadius=Math.min(+ctl.minR.value,+ctl.maxR.value);
  const maxRadius=Math.max(+ctl.minR.value,+ctl.maxR.value);
 
+ generationDiagnostic={
+  requested:requestedCount,
+  placed:0,
+  failedIndex:null,
+  stopReason:"",
+  triedRadius:null,
+  previousRadius:null,
+  previousS:null,
+  remaining:model.total
+ };
+ lastFindDiagnostic=null;
+
  let radius=clamp(+ctl.base.value,minRadius,maxRadius);
  const first=circleAtArc(model,0,radius);
 
@@ -993,30 +1258,64 @@ function generatePreview(){
 
  if(collidesWithAccepted(first)){
   previewStopReason="Az első kör ütközik egy már elfogadott körrel.";
+  generationDiagnostic.failedIndex=1;
+  generationDiagnostic.stopReason=previewStopReason;
+  generationDiagnostic.triedRadius=radius;
+  generationDiagnostic.remaining=model.total;
  }else{
   previewCircles.push(first);
+  generationDiagnostic.placed=1;
  }
 
  for(let index=1;index<requestedCount&&previewCircles.length>0;index++){
-  radius=nextRadius(previewCircles[previewCircles.length-1].r);
-  const next=findNextCircle(model,previewCircles[previewCircles.length-1],radius);
+  const previous=previewCircles[previewCircles.length-1];
+  radius=nextRadius(previous.r);
+
+  generationDiagnostic.failedIndex=index+1;
+  generationDiagnostic.triedRadius=radius;
+  generationDiagnostic.previousRadius=previous.r;
+  generationDiagnostic.previousS=previous.s;
+  generationDiagnostic.remaining=Math.max(0,model.total-previous.s);
+
+  const next=findNextCircle(model,previous,radius);
 
   if(!next){
    previewStopReason="A görbe hátralévő részén nincs pontos következő érintési megoldás.";
+   generationDiagnostic.stopReason=previewStopReason;
    break;
   }
 
   if(collidesWithAccepted(next)){
    previewStopReason="A következő kör egy már elfogadott körrel ütközne.";
+   generationDiagnostic.stopReason=previewStopReason;
+   lastFindDiagnostic={
+    stage:"acceptedCollision",
+    detail:`A ${index+1}. kör metszi valamelyik korábban elfogadott kört.`
+   };
    break;
   }
 
   if(collidesWithPreview(next,previewCircles)){
    previewStopReason="A következő kör a saját láncának egy korábbi körével ütközne.";
+   generationDiagnostic.stopReason=previewStopReason;
+   lastFindDiagnostic={
+    stage:"previewCollision",
+    detail:`A ${index+1}. kör nem szomszédos előnézeti körrel ütközik.`
+   };
    break;
   }
 
   previewCircles.push(next);
+  generationDiagnostic.placed=previewCircles.length;
+  generationDiagnostic.failedIndex=null;
+  generationDiagnostic.stopReason="";
+ }
+
+ generationDiagnostic.placed=previewCircles.length;
+
+ if(!previewStopReason&&previewCircles.length===requestedCount){
+  generationDiagnostic.stopReason="A kért körszám elérve.";
+  generationDiagnostic.failedIndex=null;
  }
 
  statusBox.textContent=previewStopReason
@@ -1034,6 +1333,11 @@ function resetSelection(){
  chosenDirection=null;
  previewCircles=[];
  previewStopReason="";
+ lastFindDiagnostic=null;
+ generationDiagnostic={
+  requested:null,placed:0,failedIndex:null,stopReason:"",
+  triedRadius:null,previousRadius:null,previousS:null,remaining:null
+ };
 }
 
 function rejectPreview(){
@@ -1097,9 +1401,10 @@ function arrowAtPoint(x,y){
 }
 
 canvas.addEventListener("click",event=>{
- if(!imgData)return;
- const rect=canvas.getBoundingClientRect();
- const point={x:(event.clientX-rect.left)*canvas.width/rect.width,y:(event.clientY-rect.top)*canvas.height/rect.height};
+ if(!sourceImage||isPanning)return;
+
+ const screenPoint=screenEventPoint(event);
+ const point=screenToGlobal(screenPoint);
 
  if(candidateCurve&&!candidateCurve.accepted){
   if(trimCandidateCurveAt(point))return;
@@ -1124,7 +1429,7 @@ canvas.addEventListener("click",event=>{
 
  if(candidateCurve&&candidateCurve.accepted){
   const nearest=nearestEdgeIndex(candidateCurve,point);
-  const selectionTolerance=Math.max(14,+ctl.snap.value*1.5);
+  const selectionTolerance=Math.max(14,+ctl.snap.value*1.5)/viewScale;
   if(nearest.distance<=selectionTolerance){
    selectedStart={index:nearest.index,point:{...candidateCurve.points[nearest.index]}};
    makeArrowChoices();
@@ -1135,7 +1440,9 @@ canvas.addEventListener("click",event=>{
   return;
  }
 
- const detected=detectCurveAt(point.x,point.y);
+ ensureRasterAnalysis();
+ const detectedLocal=detectCurveAt(screenPoint.x,screenPoint.y);
+ const detected=detectedLocal?localCurveToGlobal(detectedLocal):null;
  if(!detected||detected.rejected){
   const detail=detected?` Bal vég: ${stopReasonLabel(detected.stopReasons.backward)}, jobb vég: ${stopReasonLabel(detected.stopReasons.forward)}.`:"";
   statusBox.textContent="A kattintás környezetében nem készült értékelhető görbejavaslat."+detail;
@@ -1153,7 +1460,7 @@ canvas.addEventListener("click",event=>{
 });
 
 function drawArrow(arrow){
- const size=11;
+ const size=11/viewScale;
  const endX=arrow.x+arrow.vx*size;
  const endY=arrow.y+arrow.vy*size;
  const startX=arrow.x-arrow.vx*size;
@@ -1162,7 +1469,7 @@ function drawArrow(arrow){
 
  ctx.strokeStyle="#176bc0";
  ctx.fillStyle="rgba(255,255,255,.92)";
- ctx.lineWidth=3;
+ ctx.lineWidth=3/viewScale;
 
  ctx.beginPath();
  ctx.arc(arrow.x,arrow.y,arrow.radius,0,Math.PI*2);
@@ -1178,12 +1485,12 @@ function drawArrow(arrow){
  ctx.beginPath();
  ctx.moveTo(endX,endY);
  ctx.lineTo(
-  endX-arrow.vx*8+perpendicular.x*5,
-  endY-arrow.vy*8+perpendicular.y*5
+  endX-arrow.vx*(8/viewScale)+perpendicular.x*(5/viewScale),
+  endY-arrow.vy*(8/viewScale)+perpendicular.y*(5/viewScale)
  );
  ctx.lineTo(
-  endX-arrow.vx*8-perpendicular.x*5,
-  endY-arrow.vy*8-perpendicular.y*5
+  endX-arrow.vx*(8/viewScale)-perpendicular.x*(5/viewScale),
+  endY-arrow.vy*(8/viewScale)-perpendicular.y*(5/viewScale)
  );
  ctx.closePath();
  ctx.fill();
@@ -1205,26 +1512,34 @@ function drawCircle(circle,preview=false){
  if(ctl.showCenters.checked){
   ctx.fillStyle="#111";
   ctx.beginPath();
-  ctx.arc(circle.x,circle.y,2.4,0,Math.PI*2);
+  ctx.arc(circle.x,circle.y,2.4/viewScale,0,Math.PI*2);
   ctx.fill();
 
   ctx.fillStyle="#ff00aa";
   ctx.beginPath();
-  ctx.arc(circle.touch.x,circle.touch.y,3,0,Math.PI*2);
+  ctx.arc(circle.touch.x,circle.touch.y,3/viewScale,0,Math.PI*2);
   ctx.fill();
  }
 }
 
 function draw(){
+ ctx.setTransform(1,0,0,1,0,0);
  ctx.clearRect(0,0,canvas.width,canvas.height);
  ctx.fillStyle="#fff";
  ctx.fillRect(0,0,canvas.width,canvas.height);
 
- if(imgData){
+ if(sourceImage){
   ctx.globalAlpha=+ctl.opacity.value/100;
   ctx.drawImage(src,0,0);
   ctx.globalAlpha=1;
  }
+
+ ctx.save();
+ ctx.setTransform(
+  viewScale,0,0,viewScale,
+  canvas.width/2-viewCenterX*viewScale,
+  canvas.height/2-viewCenterY*viewScale
+ );
 
  acceptedChains.forEach(chain=>{
   chain.circles.forEach(circle=>drawCircle(circle,false));
@@ -1232,22 +1547,30 @@ function draw(){
 
  if(ctl.showEdge.checked&&candidateCurve){
   ctx.strokeStyle=candidateCurve.accepted?"#ffd400":"#ffb000";
-  ctx.lineWidth=candidateCurve.accepted?3:4;
+  ctx.lineWidth=(candidateCurve.accepted?3:4)/viewScale;
   ctx.beginPath();
+
   candidateCurve.points.forEach((point,index)=>{
    if(index===0)ctx.moveTo(point.x,point.y);
    else ctx.lineTo(point.x,point.y);
   });
+
   if(candidateCurve.closed)ctx.closePath();
   ctx.stroke();
 
   if(candidateCurve.points.length){
    const first=candidateCurve.points[0];
    const last=candidateCurve.points[candidateCurve.points.length-1];
+
    ctx.fillStyle=candidateCurve.closed?"#8a2be2":"#d62728";
-   ctx.beginPath();ctx.arc(first.x,first.y,5,0,Math.PI*2);ctx.fill();
+   ctx.beginPath();
+   ctx.arc(first.x,first.y,5/viewScale,0,Math.PI*2);
+   ctx.fill();
+
    ctx.fillStyle=candidateCurve.closed?"#8a2be2":"#2ca02c";
-   ctx.beginPath();ctx.arc(last.x,last.y,5,0,Math.PI*2);ctx.fill();
+   ctx.beginPath();
+   ctx.arc(last.x,last.y,5/viewScale,0,Math.PI*2);
+   ctx.fill();
   }
  }
 
@@ -1256,16 +1579,18 @@ function draw(){
  if(selectedStart){
   ctx.fillStyle="#ff00aa";
   ctx.beginPath();
-  ctx.arc(selectedStart.point.x,selectedStart.point.y,5,0,Math.PI*2);
+  ctx.arc(selectedStart.point.x,selectedStart.point.y,5/viewScale,0,Math.PI*2);
   ctx.fill();
  }
 
  if(selectedStart&&!chosenDirection){
   arrowChoices.forEach(drawArrow);
  }
+
+ ctx.restore();
 }
 
-Object.values(ctl).forEach(control=>{
+Object.entries(ctl).filter(([name])=>name!=="zoom").map(([,control])=>control).forEach(control=>{
  const eventName=
   control.type==="checkbox"||control.tagName==="SELECT"
    ?"change"
@@ -1293,7 +1618,68 @@ Object.values(ctl).forEach(control=>{
  });
 });
 
+
+ctl.zoom.addEventListener("input",()=>{
+ if(!sourceImage)return;
+ const requestedScale=+ctl.zoom.value/100;
+ setViewScale(requestedScale,null);
+});
+
+canvas.addEventListener("wheel",event=>{
+ if(!sourceImage)return;
+ event.preventDefault();
+
+ const anchor=screenEventPoint(event);
+ const factor=event.deltaY<0?1.15:1/1.15;
+ setViewScale(viewScale*factor,anchor);
+},{passive:false});
+
+canvas.addEventListener("contextmenu",event=>event.preventDefault());
+
+canvas.addEventListener("mousedown",event=>{
+ if(!sourceImage||event.button!==2)return;
+
+ event.preventDefault();
+ isPanning=true;
+ panStartScreen=screenEventPoint(event);
+ panStartCenter={x:viewCenterX,y:viewCenterY};
+ canvas.style.cursor="grabbing";
+});
+
+window.addEventListener("mousemove",event=>{
+ if(!isPanning||!sourceImage)return;
+
+ const rect=canvas.getBoundingClientRect();
+ const current={
+  x:(event.clientX-rect.left)*canvas.width/rect.width,
+  y:(event.clientY-rect.top)*canvas.height/rect.height
+ };
+
+ const dx=current.x-panStartScreen.x;
+ const dy=current.y-panStartScreen.y;
+
+ viewCenterX=panStartCenter.x-dx/viewScale;
+ viewCenterY=panStartCenter.y-dy/viewScale;
+ clampViewCenter();
+
+ if(selectedStart&&!chosenDirection)makeArrowChoices();
+
+ renderViewportImage();
+});
+
+window.addEventListener("mouseup",event=>{
+ if(!isPanning||event.button!==2)return;
+
+ isPanning=false;
+ canvas.style.cursor="crosshair";
+ rebuildRasterAnalysis();
+ stats();
+ draw();
+});
+
+
 newEdgeButton.addEventListener("click",()=>{
+ ensureRasterAnalysis();
  candidateCurve=null;selectedStart=null;arrowChoices=[];chosenDirection=null;previewCircles=[];previewStopReason="";
  statusBox.textContent="Kattints egy új él közelébe.";
  stats();draw();
@@ -1320,6 +1706,7 @@ clearButton.addEventListener("click",()=>{
  draw();
 });
 
+updateZoomControl();
 labels();
 stats();
 draw();

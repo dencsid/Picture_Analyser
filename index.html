@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Görbekövető érintő körlánc labor V0.9a – logaritmikus körszám</title>
+<title>Görbekövető érintő körlánc labor V0.10 – JSON mentés</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;font-family:Arial,Helvetica,sans-serif;background:#ddd;color:#222}
@@ -46,7 +46,7 @@ button.curve-reject{background:#9b3b35}
 </head>
 <body>
 <header>
-<h1>Görbekövető érintő körlánc labor V0.9a – logaritmikus körszám</h1>
+<h1>Görbekövető érintő körlánc labor V0.10 – JSON mentés</h1>
 <p>Görbejavaslat → görbe elfogadása → kezdőpont → négyirányú körlánc-előnézet → elfogadás.</p>
 </header>
 
@@ -100,6 +100,10 @@ button.curve-reject{background:#9b3b35}
 <button id="accept" class="accept" disabled>Elfogadás</button>
 <button id="reject" class="reject" disabled>Elvetés</button>
 <button id="clear" class="secondary" disabled>Minden törlése</button>
+</div>
+
+<div class="button-row">
+<button id="saveJson" class="secondary" disabled>JSON mentés</button>
 </div>
 
 <div id="status" class="box">Tölts be egy tesztképet.</div>
@@ -162,6 +166,7 @@ const regenerateButton=$("regenerate");
 const acceptButton=$("accept");
 const rejectButton=$("reject");
 const clearButton=$("clear");
+const saveJsonButton=$("saveJson");
 const statusBox=$("status");
 
 const acceptedChainsBox=$("acceptedChains");
@@ -206,6 +211,7 @@ const ctl={
 let imgData=null,gray=null,sobel=null,gx=null,gy=null;
 
 let sourceImage=null;
+let sourceFileName="";
 let sourceWidth=0,sourceHeight=0;
 let fitScale=1;
 let viewScale=1;
@@ -406,6 +412,90 @@ function screenEventPoint(event){
  };
 }
 
+
+function safeBaseName(fileName){
+ const name=(fileName||"kep").replace(/^.*[\\/]/,"");
+ return name.replace(/\.[^.]+$/,"")||"kep";
+}
+
+function buildGeometryExport(){
+ /*
+   A háttérkép képi adatait szándékosan NEM mentjük.
+   A geometria az eredeti kép globális pixel-koordinátáiban van.
+ */
+ return{
+  format:"PictureAnalyzerEdgeChains",
+  version:1,
+  createdAt:new Date().toISOString(),
+
+  sourceImage:{
+   fileName:sourceFileName||"",
+   widthPx:sourceWidth,
+   heightPx:sourceHeight
+  },
+
+  coordinateSystem:{
+   unit:"source-pixel",
+   origin:"top-left",
+   xAxis:"right",
+   yAxis:"down"
+  },
+
+  chains:acceptedChains.map((chain,chainIndex)=>({
+   id:chainIndex+1,
+
+   edge:{
+    closed:!!chain.edgeClosed,
+    points:(chain.edgePoints||[]).map(point=>({
+     x:point.x,
+     y:point.y
+    }))
+   },
+
+   circles:(chain.circles||[]).map((circle,circleIndex)=>({
+    id:circleIndex+1,
+    x:circle.x,
+    y:circle.y,
+    r:circle.r,
+    touch:circle.touch?{
+     x:circle.touch.x,
+     y:circle.touch.y
+    }:null
+   }))
+  }))
+ };
+}
+
+function saveGeometryJson(){
+ if(!sourceImage){
+  statusBox.textContent="JSON mentéshez előbb tölts be egy háttérképet.";
+  return;
+ }
+
+ if(acceptedChains.length===0){
+  statusBox.textContent="Nincs elmenthető elfogadott körlánc.";
+  return;
+ }
+
+ const data=buildGeometryExport();
+ const json=JSON.stringify(data,null,2);
+ const blob=new Blob([json],{type:"application/json;charset=utf-8"});
+ const url=URL.createObjectURL(blob);
+
+ const anchor=document.createElement("a");
+ anchor.href=url;
+ anchor.download=safeBaseName(sourceFileName)+"_edgechains.json";
+ document.body.appendChild(anchor);
+ anchor.click();
+ anchor.remove();
+
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+
+ statusBox.textContent=
+  `JSON elmentve: ${data.chains.length} lánc, `+
+  `${data.chains.reduce((sum,chain)=>sum+chain.circles.length,0)} kör.`;
+}
+
 function totalAcceptedCircles(){
  return acceptedChains.reduce((sum,chain)=>sum+chain.circles.length,0);
 }
@@ -421,6 +511,7 @@ function updateButtons(){
  acceptButton.disabled=previewCircles.length===0;
  rejectButton.disabled=!chosenDirection&&previewCircles.length===0;
  clearButton.disabled=!sourceImage&&acceptedChains.length===0;
+ saveJsonButton.disabled=!sourceImage||acceptedChains.length===0;
  canvas.style.cursor="crosshair";
 }
 
@@ -485,6 +576,7 @@ imageInput.addEventListener("change",()=>{
     src.height=canvas.height;
 
     sourceImage=image;
+    sourceFileName=file.name||"";
     sourceWidth=image.naturalWidth;
     sourceHeight=image.naturalHeight;
 
@@ -1710,6 +1802,8 @@ regenerateButton.addEventListener("click",()=>{
 
 acceptButton.addEventListener("click",acceptPreview);
 rejectButton.addEventListener("click",rejectPreview);
+
+saveJsonButton.addEventListener("click",saveGeometryJson);
 
 clearButton.addEventListener("click",()=>{
  acceptedChains=[];

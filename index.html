@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Görbekövető érintő körlánc labor V0.10 – JSON mentés</title>
+<title>Görbekövető érintő körlánc labor V0.10a – JSON mentés csak körláncokkal</title>
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;font-family:Arial,Helvetica,sans-serif;background:#ddd;color:#222}
@@ -46,7 +46,7 @@ button.curve-reject{background:#9b3b35}
 </head>
 <body>
 <header>
-<h1>Görbekövető érintő körlánc labor V0.10 – JSON mentés</h1>
+<h1>Görbekövető érintő körlánc labor V0.10a – JSON mentés csak körláncokkal</h1>
 <p>Görbejavaslat → görbe elfogadása → kezdőpont → négyirányú körlánc-előnézet → elfogadás.</p>
 </header>
 
@@ -70,7 +70,7 @@ button.curve-reject{background:#9b3b35}
 </div>
 <div class="row"><b>Nézet:</b>&nbsp; egérgörgő = zoom, jobb gomb + húzás = pásztázás</div>
 
-<div class="control"><label>Körök száma <span id="countV"></span></label><input id="count" type="range" min="0" max="1000" value="400" step="1"></div>
+<div class="control"><label>Körök száma <span id="countV"></span></label><input id="count" type="range" min="1" max="60" value="12"></div>
 <div class="control"><label>Alapsugár <span><span id="baseV"></span> px</span></label><input id="base" type="range" min="2" max="90" value="18"></div>
 <div class="control"><label>Szabálytalanság <span><span id="irrV"></span>%</span></label><input id="irr" type="range" min="0" max="150" value="45"></div>
 <div class="control"><label>Szabálytalanság frekvenciája <span><span id="freqV"></span>%</span></label><input id="freq" type="range" min="0" max="100" value="70"></div>
@@ -101,7 +101,6 @@ button.curve-reject{background:#9b3b35}
 <button id="reject" class="reject" disabled>Elvetés</button>
 <button id="clear" class="secondary" disabled>Minden törlése</button>
 </div>
-
 <div class="button-row">
 <button id="saveJson" class="secondary" disabled>JSON mentés</button>
 </div>
@@ -250,27 +249,13 @@ const rnd=()=>((seed=(Math.imul(seed,1664525)+1013904223)>>>0)/4294967296);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
 
-const COUNT_MIN=1;
-const COUNT_MAX=500;
-const COUNT_SLIDER_MAX=1000;
-
-function requestedCircleCount(){
- const t=clamp(+ctl.count.value/COUNT_SLIDER_MAX,0,1);
- return Math.round(
-  Math.exp(
-   Math.log(COUNT_MIN)+
-   t*(Math.log(COUNT_MAX)-Math.log(COUNT_MIN))
-  )
- );
-}
-
 function labels(){
  if(sourceImage){
   zoomValueBox.textContent=Math.round(viewScale*100);
  }else{
   zoomValueBox.textContent="—";
  }
- valueBoxes.count.textContent=requestedCircleCount();
+ valueBoxes.count.textContent=ctl.count.value;
  valueBoxes.base.textContent=ctl.base.value;
  valueBoxes.irr.textContent=ctl.irr.value;
  valueBoxes.freq.textContent=ctl.freq.value;
@@ -419,12 +404,8 @@ function safeBaseName(fileName){
 }
 
 function buildGeometryExport(){
- /*
-   A háttérkép képi adatait szándékosan NEM mentjük.
-   A geometria az eredeti kép globális pixel-koordinátáiban van.
- */
  return{
-  format:"PictureAnalyzerEdgeChains",
+  format:"PictureAnalyzerCircleChains",
   version:1,
   createdAt:new Date().toISOString(),
 
@@ -443,15 +424,6 @@ function buildGeometryExport(){
 
   chains:acceptedChains.map((chain,chainIndex)=>({
    id:chainIndex+1,
-
-   edge:{
-    closed:!!chain.edgeClosed,
-    points:(chain.edgePoints||[]).map(point=>({
-     x:point.x,
-     y:point.y
-    }))
-   },
-
    circles:(chain.circles||[]).map((circle,circleIndex)=>({
     id:circleIndex+1,
     x:circle.x,
@@ -471,7 +443,6 @@ function saveGeometryJson(){
   statusBox.textContent="JSON mentéshez előbb tölts be egy háttérképet.";
   return;
  }
-
  if(acceptedChains.length===0){
   statusBox.textContent="Nincs elmenthető elfogadott körlánc.";
   return;
@@ -481,14 +452,12 @@ function saveGeometryJson(){
  const json=JSON.stringify(data,null,2);
  const blob=new Blob([json],{type:"application/json;charset=utf-8"});
  const url=URL.createObjectURL(blob);
-
  const anchor=document.createElement("a");
  anchor.href=url;
- anchor.download=safeBaseName(sourceFileName)+"_edgechains.json";
+ anchor.download=safeBaseName(sourceFileName)+"_circlechains.json";
  document.body.appendChild(anchor);
  anchor.click();
  anchor.remove();
-
  setTimeout(()=>URL.revokeObjectURL(url),1000);
 
  statusBox.textContent=
@@ -576,7 +545,6 @@ imageInput.addEventListener("change",()=>{
     src.height=canvas.height;
 
     sourceImage=image;
-    sourceFileName=file.name||"";
     sourceWidth=image.naturalWidth;
     sourceHeight=image.naturalHeight;
 
@@ -1340,7 +1308,7 @@ function generatePreview(){
  }
 
  const model=buildArcModel(prepared.points,prepared.sideSign);
- const requestedCount=requestedCircleCount();
+ const requestedCount=+ctl.count.value;
  const minRadius=Math.min(+ctl.minR.value,+ctl.maxR.value);
  const maxRadius=Math.max(+ctl.minR.value,+ctl.maxR.value);
 

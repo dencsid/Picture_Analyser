@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.19 – rendezett fázisok és munkamenet</title>
+<title>Picture Analyzer Lab V0.20 – rendezett fázisok és munkamenet</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -380,7 +380,7 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.19 – rendezett fázisok és munkamenet</h1>
+  <h1>Picture Analyzer Lab V0.20 – rendezett fázisok és munkamenet</h1>
   <p>Három külön fázis, folytatható munkamenet, állandó teljes körszám-kijelzés.</p>
 </header>
 <main>
@@ -462,7 +462,7 @@ button {
     <h2>#14/B – Sugárvizsgálat és első kör</h2>
     <div class="control"><label for="detailGamma"><span>Részletkiemelés</span><span><span id="detailGammaValue">70</span>%</span></label><input id="detailGamma" type="range" min="20" max="200" step="5" value="70"></div>
     <div class="control"><label for="darkCandidatePercent"><span>Sötét jelölt tartomány</span><span>alsó <span id="darkCandidatePercentValue">5</span>%</span></label><input id="darkCandidatePercent" type="range" min="1" max="30" step="1" value="5"></div>
-    <div class="control"><label for="maxTestRadius"><span>Legnagyobb vizsgált sugár</span><span><span id="maxTestRadiusValue">160</span> px</span></label><input id="maxTestRadius" type="range" min="10" max="500" step="2" value="160"></div>
+    <div class="control"><label for="maxTestRadius"><span>Legnagyobb vizsgált sugár</span><span><span id="maxTestRadiusValue">160</span> px</span></label><input id="maxTestRadius" type="range" min="5" max="500" step="2" value="160"></div>
     <div class="control"><label for="radiusStep"><span>Sugárlépés</span><span><span id="radiusStepValue">2</span> px</span></label><input id="radiusStep" type="range" min="1" max="10" step="1" value="2"></div>
     <div class="control"><label for="ringWidth"><span>Külső gyűrű vastagsága</span><span><span id="ringWidthValue">4</span> px</span></label><input id="ringWidth" type="range" min="1" max="20" step="1" value="4"></div>
     <div class="control"><label for="ringThreshold"><span>Gyűrűátlag küszöbe</span><span id="ringThresholdValue">42</span></label><input id="ringThreshold" type="range" min="1" max="255" step="1" value="42"></div>
@@ -521,7 +521,7 @@ button {
         </div>
         <div class="control">
           <label for="maxCircleDiameterMm"><span>Legnagyobb kívánt körátmérő</span><span><span id="maxCircleDiameterMmValue">80</span> mm</span></label>
-          <input id="maxCircleDiameterMm" type="range" min="5" max="400" step="5" value="80">
+          <input id="maxCircleDiameterMm" type="range" min="2" max="400" step="1" value="80">
         </div>
 
         <div class="control">
@@ -616,7 +616,10 @@ button {
           <input id="reconstructionCircleCount" type="range" min="100" max="50000" step="100" value="1000">
           <div class="metric-note">A program addig keres, amíg a célt eléri, vagy a sűrített keresés sem talál további helyet.</div>
         </div>
-        <button id="generateReconstruction" disabled>1. fázis indítása</button>
+        <div class="button-row">
+          <button id="generateReconstruction" disabled>1. fázis indítása</button>
+          <button id="stopPhase1" disabled>Leállítás</button>
+        </div>
         <div id="phase1Result" class="phase-result">
           <div>Kért új körök: <strong id="phase1RequestedStat">0</strong></div>
           <div>Elhelyezett új körök: <strong id="phase1AddedStat">0</strong></div>
@@ -784,6 +787,7 @@ const circleChainsFileInput=$("circleChainsFileInput");
 const phase0Summary=$("phase0Summary"),phase1Summary=$("phase1Summary"),phase2Summary=$("phase2Summary");
 const phase0Result=$("phase0Result"),phase1Result=$("phase1Result"),phase2Result=$("phase2Result");
 const phase1RequestedStat=$("phase1RequestedStat"),phase1AddedStat=$("phase1AddedStat"),phase1TestedStat=$("phase1TestedStat"),phase1FailedBatchStat=$("phase1FailedBatchStat"),phase1StateStat=$("phase1StateStat");
+const stopPhase1Button=$("stopPhase1");
 const statusBox = $("status");
 const fileNameBox = $("fileName");
 const imageSizeBox = $("imageSize");
@@ -819,7 +823,7 @@ let cachedDirections = null;
 let corridorCacheKey = "";
 let corridorDistance = null;
 let corridorNearestEdge = null;
-let detailData=null,radiusTest=null,firstCircle=null,rawSobelMaximum=0,reconstructionCircles=[],selectedReconstructionCircle=null,childCircleSuggestion=null,childPriorityCandidates=[],selectedChildPriorityPoint=null,automaticInnerPhaseRunning=false;
+let detailData=null,radiusTest=null,firstCircle=null,rawSobelMaximum=0,reconstructionCircles=[],selectedReconstructionCircle=null,childCircleSuggestion=null,childPriorityCandidates=[],selectedChildPriorityPoint=null,automaticInnerPhaseRunning=false,phase1Running=false;
 
 const metricDescriptions = {
   original: "Az eredeti kép változtatás nélkül.",
@@ -1026,7 +1030,7 @@ imageInput.addEventListener("change", async () => {
     fileNameBox.textContent = file.name;
     imageSizeBox.textContent = `${bitmap.width} × ${bitmap.height} px`;
     if (lockFinalAspectInput.checked) finalHeightCmInput.value = (Number(finalWidthCmInput.value) * bitmap.height / bitmap.width).toFixed(1);
-    resetViewButton.disabled=false;chooseDarkPointButton.disabled=false;createFirstCircleButton.disabled=false;clearRadiusTestButton.disabled=false;generateEdgeSkeletonButton.disabled=false;generateReconstructionButton.disabled=false;clearReconstructionButton.disabled=false;saveReconstructionPdfButton.disabled=true;startAutomaticInnerPhaseButton.disabled=true;reconstructionCircles=[];selectedReconstructionCircle=null;childCircleSuggestion=null;childPriorityCandidates=[];selectedChildPriorityPoint=null;updateChildCircleStats();updatePhysicalCircleInfo();
+    phase1Running=false;stopPhase1Button.disabled=true;resetViewButton.disabled=false;chooseDarkPointButton.disabled=false;createFirstCircleButton.disabled=false;clearRadiusTestButton.disabled=false;generateEdgeSkeletonButton.disabled=false;generateReconstructionButton.disabled=false;clearReconstructionButton.disabled=false;saveReconstructionPdfButton.disabled=true;startAutomaticInnerPhaseButton.disabled=true;reconstructionCircles=[];selectedReconstructionCircle=null;childCircleSuggestion=null;childPriorityCandidates=[];selectedChildPriorityPoint=null;updateChildCircleStats();updatePhysicalCircleInfo();
     prepareDerivedImages();
     updateReconstructionStats();
     analyzeAndDraw();
@@ -1121,7 +1125,14 @@ generateEdgeSkeletonButton.addEventListener("click",()=>{
   }
 });
 generateReconstructionButton.addEventListener("click",generatePartialReconstruction);
-clearReconstructionButton.addEventListener("click",()=>{automaticInnerPhaseRunning=false;startAutomaticInnerPhaseButton.disabled=true;stopAutomaticInnerPhaseButton.disabled=true;reconstructionCircles=[];selectedReconstructionCircle=null;childCircleSuggestion=null;childPriorityCandidates=[];selectedChildPriorityPoint=null;saveReconstructionPdfButton.disabled=true;edgeSkeletonPlacedStat.textContent="0";edgeSkeletonComponentsStat.textContent="0";phase0Result.textContent="Még nem indult.";phase1StateStat.textContent="még nem indult";phase2Result.textContent="Még nem indult.";updateReconstructionStats();updateChildCircleStats();scheduleDraw();});
+stopPhase1Button.addEventListener("click",()=>{
+  if(!phase1Running)return;
+  phase1Running=false;
+  stopPhase1Button.disabled=true;
+  phase1StateStat.textContent="leállítás...";
+  setStatus("Az 1. fázis leállítása folyamatban… Az eddig elkészült körök megmaradnak.");
+});
+clearReconstructionButton.addEventListener("click",()=>{phase1Running=false;stopPhase1Button.disabled=true;automaticInnerPhaseRunning=false;startAutomaticInnerPhaseButton.disabled=true;stopAutomaticInnerPhaseButton.disabled=true;reconstructionCircles=[];selectedReconstructionCircle=null;childCircleSuggestion=null;childPriorityCandidates=[];selectedChildPriorityPoint=null;saveReconstructionPdfButton.disabled=true;edgeSkeletonPlacedStat.textContent="0";edgeSkeletonComponentsStat.textContent="0";phase0Result.textContent="Még nem indult.";phase1StateStat.textContent="még nem indult";phase2Result.textContent="Még nem indult.";updateReconstructionStats();updateChildCircleStats();scheduleDraw();});
 saveReconstructionPdfButton.addEventListener("click",saveReconstructionPdf);
 
 saveSessionButton.addEventListener("click",saveSession);
@@ -2151,8 +2162,9 @@ function generateEdgeSkeleton(){
 }
 
 
+
 function generatePartialReconstruction(){
-  if(!sourceImage||!analysis.cells.length)return;
+  if(!sourceImage||!analysis.cells.length||phase1Running)return;
   const limits=getPhysicalCircleLimits();if(!limits)return;
 
   const requestedNewCircles=Number(reconstructionCircleCountInput.value);
@@ -2165,14 +2177,24 @@ function generatePartialReconstruction(){
     width*73856093^
     height*19349663^
     requestedNewCircles*83492791^
-    initialCircleCount*2654435761
+    initialCircleCount*2654435761^
+    Math.round(limits.maxRadius*1000)
   )>>>0;
   const random=mulberry32(seed);
 
+  const maximumExistingRadius=circles.reduce(
+    (maximum,circle)=>Math.max(maximum,Number(circle.radius)||0),
+    limits.maxRadius
+  );
+
   const bucketSize=Math.max(
     8,
-    Math.min(limits.maxRadius,Math.max(limits.minRadius*4,24))
+    Math.min(
+      Math.max(limits.maxRadius,maximumExistingRadius),
+      Math.max(limits.minRadius*4,24)
+    )
   );
+
   const buckets=new Map();
   const key=(bx,by)=>`${bx},${by}`;
 
@@ -2188,29 +2210,32 @@ function generatePartialReconstruction(){
     const cell=getDetailCellAt(x,y);
     if(!cell)return null;
 
-    let clearance=Math.min(
-      limits.maxRadius,x,y,width-x,height-y
-    );
+    let clearance=Math.min(x,y,width-x,height-y);
     if(clearance<limits.minRadius)return null;
 
     const bx=Math.floor(x/bucketSize);
     const by=Math.floor(y/bucketSize);
-    const reach=Math.ceil((limits.maxRadius+clearance)/bucketSize);
+    const reach=Math.ceil(
+      (limits.maxRadius+maximumExistingRadius)/bucketSize
+    )+1;
 
-    for(let yy=by-reach;yy<=by+reach&&clearance>=limits.minRadius;yy++){
-      for(let xx=bx-reach;xx<=bx+reach&&clearance>=limits.minRadius;xx++){
+    for(let yy=by-reach;yy<=by+reach;yy++){
+      for(let xx=bx-reach;xx<=bx+reach;xx++){
         const list=buckets.get(key(xx,yy));
         if(!list)continue;
+
         for(const old of list){
           const freeDistance=Math.hypot(x-old.x,y-old.y)-old.radius;
           if(freeDistance<clearance)clearance=freeDistance;
-          if(clearance<limits.minRadius)break;
+          if(clearance<limits.minRadius)return null;
         }
       }
     }
-    if(clearance<limits.minRadius)return null;
 
-    const radius=Math.min(limits.maxRadius,clearance);
+    if(clearance<limits.minRadius)return null;
+    if(clearance>limits.maxRadius)return null;
+
+    const radius=clearance;
     const detail=Math.max(0,Math.min(1,cell.combinedDetail));
     const homogeneity=1-detail;
     const radiusRatio=Math.max(
@@ -2246,8 +2271,10 @@ function generatePartialReconstruction(){
   selectedChildPriorityPoint=null;
   updateChildCircleStats();
 
+  phase1Running=true;
   generateEdgeSkeletonButton.disabled=true;
   generateReconstructionButton.disabled=true;
+  stopPhase1Button.disabled=false;
   clearReconstructionButton.disabled=true;
   saveReconstructionPdfButton.disabled=true;
   saveSessionButton.disabled=true;
@@ -2271,6 +2298,7 @@ function generatePartialReconstruction(){
       Math.max(36,Math.ceil(Math.sqrt(Math.max(1,remaining)))*8)
     );
     let best=null;
+
     for(let i=0;i<sampleCount&&candidateTests<absoluteMaximumTests;i++){
       candidateTests++;
       const x=limits.minRadius+
@@ -2284,12 +2312,6 @@ function generatePartialReconstruction(){
   };
 
   const systematicFallback=()=>{
-    /*
-      Ha a véletlen keresés sokszor egymás után sikertelen,
-      a program egyre sűrűbb, eltolt rácson végignézi a képet.
-      Ez megakadályozza, hogy néhány száz kör után pusztán balszerencse
-      miatt késznek tekintse a fázist.
-    */
     const spacings=[
       Math.max(limits.minRadius*5,32),
       Math.max(limits.minRadius*3,18),
@@ -2331,14 +2353,55 @@ function generatePartialReconstruction(){
     consecutiveFailedBatches=0;
   };
 
+  const restoreControls=()=>{
+    phase1Running=false;
+    stopPhase1Button.disabled=true;
+    generateEdgeSkeletonButton.disabled=false;
+    generateReconstructionButton.disabled=false;
+    clearReconstructionButton.disabled=false;
+    saveReconstructionPdfButton.disabled=circles.length===0;
+    saveSessionButton.disabled=circles.length===0;
+    startAutomaticInnerPhaseButton.disabled=circles.length===0;
+  };
+
+  const finishRun=(reason,reached)=>{
+    restoreControls();
+    const added=circles.length-initialCircleCount;
+
+    phase1StateStat.textContent=
+      reached
+        ?"cél teljesítve"
+        :reason==="felhasználói leállítás"
+          ?"kézzel leállítva"
+          :`megállt: ${reason}`;
+
+    phase1Summary.textContent=
+      reached
+        ?`${added.toLocaleString()} új kör · kész`
+        :`${added.toLocaleString()} új kör · ${reason==="felhasználói leállítás"?"leállítva":"nem teljes"}`;
+
+    setStatus(
+      `Az 1. fázis ${reached?"befejeződött":"megállt"}. `+
+      `Kért: ${requestedNewCircles.toLocaleString()}, `+
+      `elhelyezett: ${added.toLocaleString()}. `+
+      `Összes kör: ${circles.length.toLocaleString()}. `+
+      `Ok: ${reason}.`
+    );
+
+    reconstructionCircles=circles;
+    updateReconstructionStats();
+    draw();
+  };
+
   const processChunk=()=>{
     const chunkStart=performance.now();
 
     while(
+      phase1Running&&
       circles.length<targetTotalCircleCount&&
       candidateTests<absoluteMaximumTests&&
       failedBatches<maximumFailedBatches&&
-      performance.now()-chunkStart<28
+      performance.now()-chunkStart<18
     ){
       let best=randomCandidateBatch();
 
@@ -2362,28 +2425,32 @@ function generatePartialReconstruction(){
     phase1AddedStat.textContent=added.toLocaleString();
     phase1TestedStat.textContent=candidateTests.toLocaleString();
     phase1FailedBatchStat.textContent=failedBatches.toLocaleString();
+    phase1StateStat.textContent=phase1Running?"fut":"leállítás...";
+    phase1Summary.textContent=
+      `${added.toLocaleString()} / ${requestedNewCircles.toLocaleString()} új kör`;
 
     setStatus(
       `1. fázis: ${added.toLocaleString()} / `+
       `${requestedNewCircles.toLocaleString()} új kör; `+
+      `összesen ${circles.length.toLocaleString()} kör; `+
       `${candidateTests.toLocaleString()} jelölt megvizsgálva.`
     );
+
+    draw();
+
+    if(!phase1Running){
+      finishRun("felhasználói leállítás",false);
+      return;
+    }
 
     if(
       circles.length<targetTotalCircleCount&&
       candidateTests<absoluteMaximumTests&&
       failedBatches<maximumFailedBatches
     ){
-      setTimeout(processChunk,0);
+      requestAnimationFrame(()=>setTimeout(processChunk,0));
       return;
     }
-
-    generateEdgeSkeletonButton.disabled=false;
-    generateReconstructionButton.disabled=false;
-    clearReconstructionButton.disabled=false;
-    saveReconstructionPdfButton.disabled=circles.length===0;
-    saveSessionButton.disabled=circles.length===0;
-    startAutomaticInnerPhaseButton.disabled=circles.length===0;
 
     const reached=circles.length>=targetTotalCircleCount;
     const reason=reached
@@ -2392,22 +2459,11 @@ function generatePartialReconstruction(){
         ?"a teljes, kibővített keresési keret elfogyott"
         :"a véletlen és a sűrített rácsos keresés sem talált további helyet";
 
-    phase1StateStat.textContent=reached?"cél teljesítve":`megállt: ${reason}`;
-    phase1Summary.textContent=reached
-      ?`${(circles.length-initialCircleCount).toLocaleString()} új kör · kész`
-      :`${(circles.length-initialCircleCount).toLocaleString()} új kör · nem teljes`;
-
-    setStatus(
-      `Az 1. fázis ${reached?"befejeződött":"megállt"}. `+
-      `Kért: ${requestedNewCircles.toLocaleString()}, `+
-      `elhelyezett: ${(circles.length-initialCircleCount).toLocaleString()}. `+
-      `Ok: ${reason}.`
-    );
+    finishRun(reason,reached);
   };
 
-  setTimeout(processChunk,0);
+  requestAnimationFrame(()=>setTimeout(processChunk,0));
 }
-
 
 
 function getCircleBorderWidth(radius){

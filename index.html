@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.22 – rendezett fázisok és munkamenet</title>
+<title>Picture Analyzer Lab V0.23 – rendezett fázisok és munkamenet</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -380,7 +380,7 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.22 – rendezett fázisok és munkamenet</h1>
+  <h1>Picture Analyzer Lab V0.23 – rendezett fázisok és munkamenet</h1>
   <p>Három külön fázis, folytatható munkamenet, állandó teljes körszám-kijelzés.</p>
 </header>
 <main>
@@ -551,7 +551,7 @@ button {
           <input id="sessionFileInput" class="session-file-input" type="file" accept=".json,application/json">
         </div>
         <div class="button-row">
-          <button id="loadCircleChains">Körlánc JSON beolvasása</button>
+          <button id="loadCircleChains">0. fázis körlánc JSON beolvasása</button>
           <input id="circleChainsFileInput" class="session-file-input" type="file" accept=".json,application/json">
         </div>
         <div class="button-row">
@@ -3615,7 +3615,7 @@ function saveSession(){
   const session={
     format:"PictureAnalyzerSession",
     formatVersion:1,
-    applicationVersion:"V0.22",
+    applicationVersion:"V0.23",
     savedAt:new Date().toISOString(),
     image:{
       fileName:fileNameBox.textContent,
@@ -3735,6 +3735,17 @@ async function loadCircleChainsFromFile(){
     }
 
     reconstructionCircles=imported;
+    ensureCircleIds();
+
+    // Az importált körlánc a főprogramban teljes értékű 0. fázis.
+    // Nincs szülő-gyerek viszony: az 1. fázis innen közvetlenül folytatható.
+    for(const circle of reconstructionCircles){
+      circle.phase=0;
+      circle.parent=null;
+      circle.parentId=null;
+      circle.prioritySource="importedCircleChain";
+    }
+
     selectedReconstructionCircle=null;
     childCircleSuggestion=null;
     childPriorityCandidates=[];
@@ -3742,6 +3753,11 @@ async function loadCircleChainsFromFile(){
     automaticInnerPhaseRunning=false;
     phase2RunState=null;
     continueAutomaticInnerPhaseButton.disabled=true;
+    generateReconstructionButton.disabled=false;
+    startAutomaticInnerPhaseButton.disabled=reconstructionCircles.length===0;
+    clearReconstructionButton.disabled=false;
+    saveReconstructionPdfButton.disabled=reconstructionCircles.length===0;
+    saveSessionButton.disabled=reconstructionCircles.length===0;
 
     displayModeInput.value="partialReconstruction";
     updateMetricDescription();
@@ -3889,7 +3905,7 @@ function circlePdfPath(cx,cy,r){
   return `${(cx+r).toFixed(3)} ${cy.toFixed(3)} m\n${(cx+r).toFixed(3)} ${(cy+kr).toFixed(3)} ${(cx+kr).toFixed(3)} ${(cy+r).toFixed(3)} ${cx.toFixed(3)} ${(cy+r).toFixed(3)} c\n${(cx-kr).toFixed(3)} ${(cy+r).toFixed(3)} ${(cx-r).toFixed(3)} ${(cy+kr).toFixed(3)} ${(cx-r).toFixed(3)} ${cy.toFixed(3)} c\n${(cx-r).toFixed(3)} ${(cy-kr).toFixed(3)} ${(cx-kr).toFixed(3)} ${(cy-r).toFixed(3)} ${cx.toFixed(3)} ${(cy-r).toFixed(3)} c\n${(cx+kr).toFixed(3)} ${(cy-r).toFixed(3)} ${(cx+r).toFixed(3)} ${(cy-kr).toFixed(3)} ${(cx+r).toFixed(3)} ${cy.toFixed(3)} c\n`;
 }
 function buildPdf(objects,rootId,infoId){
-  let out="%PDF-1.4\n%\xE2\xE3\xCF\xD3\n",offsets=[0];
+  let out="%PDF-1.5\n%\xE2\xE3\xCF\xD3\n",offsets=[0];
   for(let i=0;i<objects.length;i++){offsets.push(out.length);out+=`${i+1} 0 obj\n${objects[i]}\nendobj\n`;}
   const xref=out.length;out+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n`;
   for(let i=1;i<offsets.length;i++)out+=String(offsets[i]).padStart(10,"0")+" 00000 n \n";
@@ -3904,68 +3920,248 @@ function safePdfColorComponent(value){
 function saveReconstructionPdf(){
   if(!sourceImage||!reconstructionCircles.length)return;
   const limits=getPhysicalCircleLimits();if(!limits)return;
-  setStatus("Vektoros PDF készítése…");
+
+  setStatus("Rétegezett vektoros PDF készítése…");
+
   setTimeout(()=>{
     const ptPerMm=72/25.4;
-    const pageW=limits.widthMm*ptPerMm,pageH=limits.heightMm*ptPerMm;
-    const scale=Math.min(pageW/sourceImage.width,pageH/sourceImage.height);
-    const offsetX=(pageW-sourceImage.width*scale)/2,offsetY=(pageH-sourceImage.height*scale)/2;
-    let art=`1 1 1 rg\n0 0 ${pageW.toFixed(3)} ${pageH.toFixed(3)} re f\n`;
-    for(const c of reconstructionCircles){
-      const x=offsetX+c.x*scale;
-      const y=pageH-(offsetY+c.y*scale);
-      const outerRadius=c.radius*scale;
-      const colorRadius=getCircleColorRadius(c)*scale;
-      const red=safePdfColorComponent(c.color?.r);
-      const green=safePdfColorComponent(c.color?.g);
-      const blue=safePdfColorComponent(c.color?.b);
+    const pageW=limits.widthMm*ptPerMm;
+    const pageH=limits.heightMm*ptPerMm;
+    const scale=Math.min(
+      pageW/sourceImage.width,
+      pageH/sourceImage.height
+    );
+    const offsetX=(pageW-sourceImage.width*scale)/2;
+    const offsetY=(pageH-sourceImage.height*scale)/2;
 
-      // Fekete geometriai külső kör.
-      art+="0 0 0 rg\n";
-      art+=circlePdfPath(x,y,outerRadius)+"f\n";
+    /*
+      PDF Optional Content Groups (OCG-k).
+      Az Illustrator/Acrobat számára ezek valódi PDF-rétegek.
+      A hat réteg:
+        0. fázis / Geometria
+        0. fázis / Színezés
+        1. fázis / Geometria
+        1. fázis / Színezés
+        2. fázis / Geometria
+        2. fázis / Színezés
+    */
+    const layerDefs=[
+      {key:"P0G",phase:0,kind:"geometry",name:"0. fázis – Geometria"},
+      {key:"P0C",phase:0,kind:"color",   name:"0. fázis – Színezés"},
+      {key:"P1G",phase:1,kind:"geometry",name:"1. fázis – Geometria"},
+      {key:"P1C",phase:1,kind:"color",   name:"1. fázis – Színezés"},
+      {key:"P2G",phase:2,kind:"geometry",name:"2. fázis – Geometria"},
+      {key:"P2C",phase:2,kind:"color",   name:"2. fázis – Színezés"}
+    ];
 
-      // Színes belső betét.
-      if(colorRadius>0){
-        art+=`${red.toFixed(4)} ${green.toFixed(4)} ${blue.toFixed(4)} rg\n`;
-        art+=circlePdfPath(x,y,colorRadius)+"f\n";
-      }
+    const circlesByPhase=new Map([[0,[]],[1,[]],[2,[]]]);
+    for(const circle of reconstructionCircles){
+      const phase=[0,1,2].includes(Number(circle.phase))
+        ?Number(circle.phase)
+        :0;
+      circlesByPhase.get(phase).push(circle);
     }
+
+    const layerContent=Object.fromEntries(
+      layerDefs.map(def=>[def.key,""])
+    );
+
+    for(const def of layerDefs){
+      const circles=circlesByPhase.get(def.phase)||[];
+      let content="";
+
+      for(const c of circles){
+        const x=offsetX+c.x*scale;
+        const y=pageH-(offsetY+c.y*scale);
+
+        if(def.kind==="geometry"){
+          const outerRadius=c.radius*scale;
+          if(!(outerRadius>0))continue;
+
+          content+="0 0 0 rg\n";
+          content+=circlePdfPath(x,y,outerRadius)+"f\n";
+        }else{
+          const colorRadius=getCircleColorRadius(c)*scale;
+          if(!(colorRadius>0))continue;
+
+          const red=safePdfColorComponent(c.color?.r);
+          const green=safePdfColorComponent(c.color?.g);
+          const blue=safePdfColorComponent(c.color?.b);
+
+          content+=
+            `${red.toFixed(4)} ${green.toFixed(4)} ${blue.toFixed(4)} rg\n`;
+          content+=circlePdfPath(x,y,colorRadius)+"f\n";
+        }
+      }
+
+      layerContent[def.key]=content;
+    }
+
+    /*
+      Dinamikus objektumszámozás: így a PDF-struktúra
+      nem törik el attól, ha később új objektum kerül bele.
+    */
+    const objects=[];
+    const addObject=content=>{
+      objects.push(content);
+      return objects.length;
+    };
+    const setObject=(id,content)=>{
+      objects[id-1]=content;
+    };
+
+    // 1. A Catalog helyét előre lefoglaljuk.
+    const catalogId=addObject("");
+
+    // 2. Pages
+    const pagesId=addObject("");
+
+    // 3-8. OCG rétegek
+    const layerObjectIds={};
+    for(const def of layerDefs){
+      layerObjectIds[def.key]=addObject(
+        `<< /Type /OCG /Name (${pdfEscape(def.name)}) >>`
+      );
+    }
+
+    /*
+      A fő képi tartalom egyetlen content streamben marad,
+      de minden rész BDC/EMC blokkal a megfelelő OCG-réteghez tartozik.
+      Először minden fekete geometria, utána minden színezés készül
+      fázisonként elkülönítve.
+    */
+    let art=
+      `1 1 1 rg\n0 0 ${pageW.toFixed(3)} ${pageH.toFixed(3)} re f\n`;
+
+    for(const def of layerDefs){
+      art+=`/OC /${def.key} BDC\n`;
+      art+=layerContent[def.key];
+      art+="EMC\n";
+    }
+
+    const artStreamId=addObject(
+      `<< /Length ${art.length} >>\nstream\n${art}endstream`
+    );
+
+    const propertiesEntries=layerDefs.map(def=>
+      `/${def.key} ${layerObjectIds[def.key]} 0 R`
+    ).join(" ");
+
+    const artPageId=addObject(
+      `<< /Type /Page /Parent ${pagesId} 0 R `+
+      `/MediaBox [0 0 ${pageW.toFixed(3)} ${pageH.toFixed(3)}] `+
+      `/Resources << /Properties << ${propertiesEntries} >> >> `+
+      `/Contents ${artStreamId} 0 R >>`
+    );
+
+    // Információs oldal.
     const a4w=595.276,a4h=841.89;
-    const category=imageCategoryInput.options[imageCategoryInput.selectedIndex].text;
+    const category=
+      imageCategoryInput.options[imageCategoryInput.selectedIndex].text;
     const date=new Date().toLocaleString("hu-HU");
+
+    const phaseCounts=[0,1,2].map(
+      phase=>circlesByPhase.get(phase).length
+    );
+
     const lines=[
-      "Picture Analyzer Lab V0.16 M2 - fekete geometriai körök",
+      "Picture Analyzer Lab V0.23 - retegezett vektoros PDF",
       `Forrasfajl: ${fileNameBox.textContent}`,
       `Kategoria: ${category}`,
       `Vegleges meret: ${finalWidthCmInput.value} x ${finalHeightCmInput.value} cm`,
       `Korok szama: ${reconstructionCircles.length}`,
+      `0. fazis: ${phaseCounts[0]} kor`,
+      `1. fazis: ${phaseCounts[1]} kor`,
+      `2. fazis: ${phaseCounts[2]} kor`,
       `Koratmero: ${minCircleDiameterMmInput.value} - ${maxCircleDiameterMmInput.value} mm`,
       `Sobel suly: ${sobelWeightInput.value}%`,
       `RGB szorodas suly: ${rgbSpreadWeightInput.value}%`,
-      `Racsmeret az elemzeshez: ${gridSizeInput.value} px`,
       `Datum: ${date}`,
-      "Megjegyzes: minden kor fekete geometriai kulso korbol es kisebb szines betetbol all."
+      "PDF retegek: fazisonkent kulon Geometria (fekete) es Szinezes."
     ];
+
     let info="BT\n/F1 16 Tf\n50 790 Td\n";
-    lines.forEach((line,i)=>{if(i===1)info+="/F1 11 Tf\n";if(i)info+="0 -28 Td\n";info+=`(${pdfEscape(line)}) Tj\n`;});
+    lines.forEach((line,i)=>{
+      if(i===1)info+="/F1 11 Tf\n";
+      if(i)info+="0 -25 Td\n";
+      info+=`(${pdfEscape(line)}) Tj\n`;
+    });
     info+="ET\n";
-    const objects=[];
-    objects.push("<< /Type /Catalog /Pages 2 0 R >>");
-    objects.push("<< /Type /Pages /Kids [3 0 R 5 0 R] /Count 2 >>");
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageW.toFixed(3)} ${pageH.toFixed(3)}] /Resources << >> /Contents 4 0 R >>`);
-    objects.push(`<< /Length ${art.length} >>\nstream\n${art}endstream`);
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${a4w} ${a4h}] /Resources << /Font << /F1 7 0 R >> >> /Contents 6 0 R >>`);
-    objects.push(`<< /Length ${info.length} >>\nstream\n${info}endstream`);
-    objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
-    objects.push(`<< /Title (${pdfEscape("Picture Analyzer Lab V0.16 M2")}) /Subject (${pdfEscape("Fekete geometriai korok es szines betetek")}) /Creator (${pdfEscape("Picture Analyzer Lab")}) >>`);
-    const blob=buildPdf(objects,1,8);
+
+    const fontId=addObject(
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+    );
+
+    const infoStreamId=addObject(
+      `<< /Length ${info.length} >>\nstream\n${info}endstream`
+    );
+
+    const infoPageId=addObject(
+      `<< /Type /Page /Parent ${pagesId} 0 R `+
+      `/MediaBox [0 0 ${a4w} ${a4h}] `+
+      `/Resources << /Font << /F1 ${fontId} 0 R >> >> `+
+      `/Contents ${infoStreamId} 0 R >>`
+    );
+
+    const infoId=addObject(
+      `<< /Title (${pdfEscape("Picture Analyzer Lab V0.23")}) `+
+      `/Subject (${pdfEscape("Fazisonkent retegezett geometriai es szines korok")}) `+
+      `/Creator (${pdfEscape("Picture Analyzer Lab")}) >>`
+    );
+
+    // Pages objektum kitöltése.
+    setObject(
+      pagesId,
+      `<< /Type /Pages /Kids [${artPageId} 0 R ${infoPageId} 0 R] /Count 2 >>`
+    );
+
+    /*
+      Az /Order hierarchiában fázisonként jelennek meg a rétegek.
+      A PDF-szabvány szerint az első string csak címke,
+      az utána következő OCG-k a csoport tagjai.
+    */
+    const order=
+      `[ `+
+      `[(0. fazis) ${layerObjectIds.P0G} 0 R ${layerObjectIds.P0C} 0 R] `+
+      `[(1. fazis) ${layerObjectIds.P1G} 0 R ${layerObjectIds.P1C} 0 R] `+
+      `[(2. fazis) ${layerObjectIds.P2G} 0 R ${layerObjectIds.P2C} 0 R] `+
+      `]`;
+
+    const ocgRefs=layerDefs.map(
+      def=>`${layerObjectIds[def.key]} 0 R`
+    ).join(" ");
+
+    // Catalog OCG konfigurációval.
+    setObject(
+      catalogId,
+      `<< /Type /Catalog /Pages ${pagesId} 0 R `+
+      `/OCProperties << `+
+      `/OCGs [${ocgRefs}] `+
+      `/D << /Name (Picture Analyzer Layers) `+
+      `/Order ${order} `+
+      `/ON [${ocgRefs}] `+
+      `/AS [] >> `+
+      `>> >>`
+    );
+
+    const blob=buildPdf(objects,catalogId,infoId);
+
     const link=document.createElement("a");
     link.href=URL.createObjectURL(blob);
-    const base=(fileNameBox.textContent||"korrekonstrukcio").replace(/\.[^.]+$/,"").replace(/[^\w.-]+/g,"_");
-    link.download=`${base}_Picture_Analyzer_V0.16_M2.pdf`;
-    document.body.appendChild(link);link.click();link.remove();
+    const base=(fileNameBox.textContent||"korrekonstrukcio")
+      .replace(/\.[^.]+$/,"")
+      .replace(/[^\w.-]+/g,"_");
+    link.download=`${base}_Picture_Analyzer_V0.23_layers.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
     setTimeout(()=>URL.revokeObjectURL(link.href),1000);
-    setStatus("A vektoros PDF elkészült és letöltődött.");
+
+    setStatus(
+      "A V0.23 rétegezett vektoros PDF elkészült. "+
+      "A 0., 1. és 2. fázis Geometria/Színezés rétegeit az Illustrator Rétegek paneljén érdemes ellenőrizni."
+    );
   },0);
 }
 

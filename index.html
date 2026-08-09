@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.20 – rendezett fázisok és munkamenet</title>
+<title>Picture Analyzer Lab V0.21 – rendezett fázisok és munkamenet</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -380,7 +380,7 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.20 – rendezett fázisok és munkamenet</h1>
+  <h1>Picture Analyzer Lab V0.21 – rendezett fázisok és munkamenet</h1>
   <p>Három külön fázis, folytatható munkamenet, állandó teljes körszám-kijelzés.</p>
 </header>
 <main>
@@ -646,9 +646,21 @@ button {
             <input id="childDetailWeight" type="range" min="0" max="100" step="1" value="70">
           </div>
           <div class="control">
-            <label for="automaticInnerCircleCount"><span>Hozzáadandó belső körök</span><span id="automaticInnerCircleCountValue">500</span></label>
+            <label for="innerTargetMode"><span>Szülőkör célszámának képlete</span></label>
+            <select id="innerTargetMode">
+              <option value="radius" selected>k · r</option>
+              <option value="area">k · r²</option>
+            </select>
+          </div>
+          <div class="control">
+            <label for="innerTargetFactor"><span>k együttható</span><span id="innerTargetFactorValue">0.100</span></label>
+            <input id="innerTargetFactor" type="range" min="0.001" max="2" step="0.001" value="0.100">
+            <div class="metric-note">r a szülőkör sugara képpontban. A teljes futást a lenti globális körszám-korlát is megállítja.</div>
+          </div>
+          <div class="control">
+            <label for="automaticInnerCircleCount"><span>Hozzáadandó belső körök – felső korlát</span><span id="automaticInnerCircleCountValue">500</span></label>
             <input id="automaticInnerCircleCount" type="range" min="10" max="10000" step="10" value="500">
-            <div class="metric-note">Mentett, visszatöltött képhez is újabb belső körök adhatók.</div>
+            <div class="metric-note">A program körönként halad; ez az összes új belső kör globális maximuma.</div>
           </div>
           <div class="button-row">
             <button id="startAutomaticInnerPhase" disabled>2. fázis indítása</button>
@@ -668,7 +680,14 @@ button {
             <div><strong>Javasolt szín:</strong> <span id="childColorStat">—</span></div>
           </div>
         </div>
-        <div id="phase2Result" class="phase-result">Még nem indult.</div>
+        <div id="phase2Result" class="phase-result">
+          <div>Állapot: <strong id="phase2StateStat">még nem indult</strong></div>
+          <div>Aktuális szülőkör: <strong id="phase2ParentStat">—</strong></div>
+          <div>Aktuális kör célja: <strong id="phase2ParentTargetStat">—</strong></div>
+          <div>Aktuális körben elkészült: <strong id="phase2ParentAddedStat">—</strong></div>
+          <div>Összes új belső kör: <strong id="phase2AddedStat">0</strong></div>
+          <div>Vizsgált belső pontok: <strong id="phase2InspectedStat">0</strong></div>
+        </div>
       </div>
     </div>
   </div>
@@ -755,7 +774,7 @@ const corridorOpacityValue = $("corridorOpacityValue");
 const splitCorridorSidesInput = $("splitCorridorSides");
 const combinedControls=$("combinedControls"),sobelWeightInput=$("sobelWeight"),sobelWeightValue=$("sobelWeightValue"),rgbSpreadWeightInput=$("rgbSpreadWeight"),rgbSpreadWeightValue=$("rgbSpreadWeightValue"),combinedFormula=$("combinedFormula");
 const reconstructionControls=$("reconstructionControls"),imageCategoryInput=$("imageCategory"),finalWidthCmInput=$("finalWidthCm"),finalHeightCmInput=$("finalHeightCm"),lockFinalAspectInput=$("lockFinalAspect"),minCircleDiameterMmInput=$("minCircleDiameterMm"),minCircleDiameterMmValue=$("minCircleDiameterMmValue"),maxCircleDiameterMmInput=$("maxCircleDiameterMm"),maxCircleDiameterMmValue=$("maxCircleDiameterMmValue"),reconstructionCircleCountInput=$("reconstructionCircleCount"),reconstructionCircleCountValue=$("reconstructionCircleCountValue"),edgeSkeletonCountInput=$("edgeSkeletonCount"),edgeSkeletonCountValue=$("edgeSkeletonCountValue"),edgeRadiusMethodInput=$("edgeRadiusMethod"),edgeSnapRadiusInput=$("edgeSnapRadius"),edgeSnapRadiusValue=$("edgeSnapRadiusValue"),edgeOrientationRadiusInput=$("edgeOrientationRadius"),edgeOrientationRadiusValue=$("edgeOrientationRadiusValue"),edgeMinimumCoherenceInput=$("edgeMinimumCoherence"),edgeMinimumCoherenceValue=$("edgeMinimumCoherenceValue"),circleLayerOpacityInput=$("circleLayerOpacity"),circleLayerOpacityValue=$("circleLayerOpacityValue"),circleBorderBaseWidthInput=$("circleBorderBaseWidth"),circleBorderBaseWidthValue=$("circleBorderBaseWidthValue"),circleBorderExponentInput=$("circleBorderExponent"),circleBorderExponentValue=$("circleBorderExponentValue"),showOriginalUnderCirclesInput=$("showOriginalUnderCircles"),physicalCircleInfo=$("physicalCircleInfo"),generateEdgeSkeletonButton=$("generateEdgeSkeleton"),generateReconstructionButton=$("generateReconstruction"),clearReconstructionButton=$("clearReconstruction"),saveReconstructionPdfButton=$("saveReconstructionPdf"),reconstructionCategoryStat=$("reconstructionCategoryStat"),placedCircleCountBox=$("placedCircleCount"),minimumRadiusStat=$("minimumRadiusStat"),maximumRadiusStat=$("maximumRadiusStat"),edgeSkeletonPlacedStat=$("edgeSkeletonPlacedStat"),edgeSkeletonComponentsStat=$("edgeSkeletonComponentsStat");
-const detailChildControls=$("detailChildControls"),childRadiusPercentInput=$("childRadiusPercent"),childRadiusPercentValue=$("childRadiusPercentValue"),childDetailWeightInput=$("childDetailWeight"),childDetailWeightValue=$("childDetailWeightValue"),automaticInnerCircleCountInput=$("automaticInnerCircleCount"),automaticInnerCircleCountValue=$("automaticInnerCircleCountValue"),startAutomaticInnerPhaseButton=$("startAutomaticInnerPhase"),stopAutomaticInnerPhaseButton=$("stopAutomaticInnerPhase"),suggestChildCircleButton=$("suggestChildCircle"),acceptChildCircleButton=$("acceptChildCircle"),clearChildSuggestionButton=$("clearChildSuggestion"),selectedCircleStat=$("selectedCircleStat"),selectedCircleDetailStat=$("selectedCircleDetailStat"),childTangencyStat=$("childTangencyStat"),childCenterStat=$("childCenterStat"),childRadiusStat=$("childRadiusStat"),childColorStat=$("childColorStat");
+const detailChildControls=$("detailChildControls"),childRadiusPercentInput=$("childRadiusPercent"),childRadiusPercentValue=$("childRadiusPercentValue"),childDetailWeightInput=$("childDetailWeight"),childDetailWeightValue=$("childDetailWeightValue"),innerTargetModeInput=$("innerTargetMode"),innerTargetFactorInput=$("innerTargetFactor"),innerTargetFactorValue=$("innerTargetFactorValue"),automaticInnerCircleCountInput=$("automaticInnerCircleCount"),automaticInnerCircleCountValue=$("automaticInnerCircleCountValue"),startAutomaticInnerPhaseButton=$("startAutomaticInnerPhase"),stopAutomaticInnerPhaseButton=$("stopAutomaticInnerPhase"),suggestChildCircleButton=$("suggestChildCircle"),acceptChildCircleButton=$("acceptChildCircle"),clearChildSuggestionButton=$("clearChildSuggestion"),selectedCircleStat=$("selectedCircleStat"),selectedCircleDetailStat=$("selectedCircleDetailStat"),childTangencyStat=$("childTangencyStat"),childCenterStat=$("childCenterStat"),childRadiusStat=$("childRadiusStat"),childColorStat=$("childColorStat");
 const radiusControls=$("radiusControls"),detailGammaInput=$("detailGamma"),detailGammaValue=$("detailGammaValue"),darkCandidatePercentInput=$("darkCandidatePercent"),darkCandidatePercentValue=$("darkCandidatePercentValue"),maxTestRadiusInput=$("maxTestRadius"),maxTestRadiusValue=$("maxTestRadiusValue"),radiusStepInput=$("radiusStep"),radiusStepValue=$("radiusStepValue"),ringWidthInput=$("ringWidth"),ringWidthValue=$("ringWidthValue"),ringThresholdInput=$("ringThreshold"),ringThresholdValue=$("ringThresholdValue"),jumpThresholdInput=$("jumpThreshold"),jumpThresholdValue=$("jumpThresholdValue"),manualRadiusInput=$("manualRadius"),manualRadiusValue=$("manualRadiusValue"),showSuggestedCircleInput=$("showSuggestedCircle"),fillFirstCircleInput=$("fillFirstCircle"),chooseDarkPointButton=$("chooseDarkPoint"),createFirstCircleButton=$("createFirstCircle"),clearRadiusTestButton=$("clearRadiusTest"),testCenterBox=$("testCenter"),currentRadiusStatBox=$("currentRadiusStat"),diskAverageBox=$("diskAverage"),ringAverageBox=$("ringAverage"),suggestedRadiusBox=$("suggestedRadius"),stopReasonBox=$("stopReason"),firstCircleColorBox=$("firstCircleColor"),radiusChart=$("radiusChart"),radiusChartCtx=radiusChart.getContext("2d");
 const edgeThresholdBox = $("edgeThreshold");
 const resetViewButton = $("resetView");
@@ -786,6 +805,7 @@ const loadCircleChainsButton=$("loadCircleChains");
 const circleChainsFileInput=$("circleChainsFileInput");
 const phase0Summary=$("phase0Summary"),phase1Summary=$("phase1Summary"),phase2Summary=$("phase2Summary");
 const phase0Result=$("phase0Result"),phase1Result=$("phase1Result"),phase2Result=$("phase2Result");
+const phase2StateStat=$("phase2StateStat"),phase2ParentStat=$("phase2ParentStat"),phase2ParentTargetStat=$("phase2ParentTargetStat"),phase2ParentAddedStat=$("phase2ParentAddedStat"),phase2AddedStat=$("phase2AddedStat"),phase2InspectedStat=$("phase2InspectedStat");
 const phase1RequestedStat=$("phase1RequestedStat"),phase1AddedStat=$("phase1AddedStat"),phase1TestedStat=$("phase1TestedStat"),phase1FailedBatchStat=$("phase1FailedBatchStat"),phase1StateStat=$("phase1StateStat");
 const stopPhase1Button=$("stopPhase1");
 const statusBox = $("status");
@@ -1106,6 +1126,7 @@ circleBorderExponentInput.addEventListener("input",()=>{
 showOriginalUnderCirclesInput.addEventListener("change",scheduleDraw);
 childRadiusPercentInput.addEventListener("input",()=>{childRadiusPercentValue.textContent=childRadiusPercentInput.value;if(selectedReconstructionCircle)suggestChildCircle();});
 childDetailWeightInput.addEventListener("input",()=>{childDetailWeightValue.textContent=childDetailWeightInput.value;if(selectedReconstructionCircle)suggestChildCircle();});
+innerTargetFactorInput.addEventListener("input",()=>innerTargetFactorValue.textContent=Number(innerTargetFactorInput.value).toFixed(3));
 automaticInnerCircleCountInput.addEventListener("input",()=>automaticInnerCircleCountValue.textContent=automaticInnerCircleCountInput.value);
 startAutomaticInnerPhaseButton.addEventListener("click",generateAutomaticInnerCircles);
 stopAutomaticInnerPhaseButton.addEventListener("click",()=>{automaticInnerPhaseRunning=false;stopAutomaticInnerPhaseButton.disabled=true;setStatus("A második fázis leállítása folyamatban…");});
@@ -1132,7 +1153,7 @@ stopPhase1Button.addEventListener("click",()=>{
   phase1StateStat.textContent="leállítás...";
   setStatus("Az 1. fázis leállítása folyamatban… Az eddig elkészült körök megmaradnak.");
 });
-clearReconstructionButton.addEventListener("click",()=>{phase1Running=false;stopPhase1Button.disabled=true;automaticInnerPhaseRunning=false;startAutomaticInnerPhaseButton.disabled=true;stopAutomaticInnerPhaseButton.disabled=true;reconstructionCircles=[];selectedReconstructionCircle=null;childCircleSuggestion=null;childPriorityCandidates=[];selectedChildPriorityPoint=null;saveReconstructionPdfButton.disabled=true;edgeSkeletonPlacedStat.textContent="0";edgeSkeletonComponentsStat.textContent="0";phase0Result.textContent="Még nem indult.";phase1StateStat.textContent="még nem indult";phase2Result.textContent="Még nem indult.";updateReconstructionStats();updateChildCircleStats();scheduleDraw();});
+clearReconstructionButton.addEventListener("click",()=>{phase1Running=false;stopPhase1Button.disabled=true;automaticInnerPhaseRunning=false;startAutomaticInnerPhaseButton.disabled=true;stopAutomaticInnerPhaseButton.disabled=true;reconstructionCircles=[];selectedReconstructionCircle=null;childCircleSuggestion=null;childPriorityCandidates=[];selectedChildPriorityPoint=null;saveReconstructionPdfButton.disabled=true;edgeSkeletonPlacedStat.textContent="0";edgeSkeletonComponentsStat.textContent="0";phase0Result.textContent="Még nem indult.";phase1StateStat.textContent="még nem indult";phase2StateStat.textContent="még nem indult";phase2ParentStat.textContent="—";phase2ParentTargetStat.textContent="—";phase2ParentAddedStat.textContent="—";phase2AddedStat.textContent="0";phase2InspectedStat.textContent="0";updateReconstructionStats();updateChildCircleStats();scheduleDraw();});
 saveReconstructionPdfButton.addEventListener("click",saveReconstructionPdf);
 
 saveSessionButton.addEventListener("click",saveSession);
@@ -2667,6 +2688,66 @@ function sortGlobalInnerPriorityList(points,progress){
   points.sort((a,b)=>b.dynamicPriority-a.dynamicPriority);
 }
 
+
+function innerTargetForParent(parent){
+  const k=Math.max(0,Number(innerTargetFactorInput.value)||0);
+  const r=Math.max(0,Number(parent?.radius)||0);
+  const raw=innerTargetModeInput.value==="area"
+    ?k*r*r
+    :k*r;
+  return Math.max(0,Math.round(raw));
+}
+
+function buildInnerPriorityPointsForParent(parent,random){
+  const colorRadius=getCircleColorRadius(parent);
+  if(colorRadius<=0)return [];
+
+  const gridSize=Math.max(2,Number(gridSizeInput.value));
+  const detailWeight=Math.max(0,Math.min(1,Number(childDetailWeightInput.value)/100));
+
+  /*
+    Csak a szülőkör saját színes korongjában keresünk.
+    Így nem keletkezik a korábbi globális listára jellemző
+    nagy mennyiségű eleve értelmetlen próbapont.
+  */
+  const minX=Math.max(0,Math.floor(parent.x-colorRadius));
+  const maxX=Math.min(sourceImage.width-1,Math.ceil(parent.x+colorRadius));
+  const minY=Math.max(0,Math.floor(parent.y-colorRadius));
+  const maxY=Math.min(sourceImage.height-1,Math.ceil(parent.y+colorRadius));
+
+  const spacing=Math.max(2,Math.min(gridSize,Math.max(3,colorRadius/8)));
+  const points=[];
+
+  for(let y=minY+spacing*.5;y<=maxY;y+=spacing){
+    for(let x=minX+spacing*.5;x<=maxX;x+=spacing){
+      const jitterX=(random()-.5)*spacing*.7;
+      const jitterY=(random()-.5)*spacing*.7;
+      const px=x+jitterX;
+      const py=y+jitterY;
+
+      if(Math.hypot(px-parent.x,py-parent.y)>=colorRadius)continue;
+
+      const detail=combinedDetailAtPixel(px,py);
+      const sobel=normalizedPixelSobelAt(px,py);
+      const edge=edgePriorityAt(px,py);
+
+      /*
+        A részletesség marad a fő szempont, de kis él/sobel
+        hozzájárulás segíti a karakteres képrészleteket.
+      */
+      const score=
+        detailWeight*detail+
+        (1-detailWeight)*(.55*sobel+.45*edge)+
+        random()*.0001;
+
+      points.push({x:px,y:py,detail,sobel,edge,score});
+    }
+  }
+
+  points.sort((a,b)=>b.score-a.score);
+  return points;
+}
+
 function generateAutomaticInnerCircles(){
   openPhaseAccordion(2);
   if(!sourceImage||!reconstructionCircles.length||automaticInnerPhaseRunning)return;
@@ -2674,30 +2755,40 @@ function generateAutomaticInnerCircles(){
   const limits=getPhysicalCircleLimits();
   if(!limits)return;
 
-  const requested=Number(automaticInnerCircleCountInput.value);
+  const globalRequested=Number(automaticInnerCircleCountInput.value);
+
+  /*
+    A feldolgozandó szülőkör-lista a futás INDULÁSAKOR készül.
+    Nagyság szerint csökkenő sorrendben járjuk végig.
+    A menet közben létrejövő új belső körök ebben a futásban
+    még nem kerülnek új szülőként vissza a listába.
+  */
+  const parents=reconstructionCircles
+    .filter(circle=>getCircleColorRadius(circle)>=2*limits.minRadius)
+    .slice()
+    .sort((a,b)=>b.radius-a.radius);
+
+  if(!parents.length){
+    setStatus("Nincs olyan kör, amelyben a beállított minimális mérettel belső kör kereshető.");
+    return;
+  }
+
   const random=mulberry32(
     (
       sourceImage.width*2654435761^
       sourceImage.height*1597334677^
       reconstructionCircles.length*2246822519^
-      requested
+      globalRequested^
+      Math.round(Number(innerTargetFactorInput.value)*100000)
     )>>>0
   );
-
-  const priorityPoints=buildGlobalInnerPriorityList(random);
-
-  if(!priorityPoints.length){
-    setStatus("Nem készült globális prioritási lista.");
-    return;
-  }
-
-  sortGlobalInnerPriorityList(priorityPoints,0);
 
   automaticInnerPhaseRunning=true;
   startAutomaticInnerPhaseButton.disabled=true;
   stopAutomaticInnerPhaseButton.disabled=false;
   generateReconstructionButton.disabled=true;
   clearReconstructionButton.disabled=true;
+  saveSessionButton.disabled=true;
 
   selectedReconstructionCircle=null;
   childCircleSuggestion=null;
@@ -2705,53 +2796,120 @@ function generateAutomaticInnerCircles(){
   selectedChildPriorityPoint=null;
   updateChildCircleStats();
 
-  let added=0;
-  let inspected=0;
-  let listIndex=0;
-  let lastSortAt=0;
+  let parentIndex=0;
+  let addedTotal=0;
+  let inspectedTotal=0;
 
-  /*
-    A lista időszakosan újrarendeződik, mert a Sobel- és élprioritás
-    súlya a második fázis előrehaladtával növekszik.
-  */
-  const resortInterval=Math.max(10,Math.floor(requested/40));
+  let currentParent=null;
+  let currentTarget=0;
+  let currentAdded=0;
+  let currentPoints=[];
+  let currentPointIndex=0;
 
-  setStatus(
-    `Második fázis: globális prioritási lista készült `+
-    `(${priorityPoints.length.toLocaleString()} pont).`
-  );
+  phase2StateStat.textContent="fut";
+  phase2ParentStat.textContent=`1 / ${parents.length.toLocaleString()}`;
+  phase2ParentTargetStat.textContent="—";
+  phase2ParentAddedStat.textContent="0";
+  phase2AddedStat.textContent="0";
+  phase2InspectedStat.textContent="0";
+  phase2Summary.textContent="fut";
+
+  const prepareParent=()=>{
+    while(parentIndex<parents.length){
+      currentParent=parents[parentIndex];
+      currentTarget=innerTargetForParent(currentParent);
+      currentAdded=0;
+      currentPointIndex=0;
+
+      /*
+        0 célértékű köröket egyszerűen átugrunk.
+      */
+      if(currentTarget<=0){
+        parentIndex++;
+        continue;
+      }
+
+      currentPoints=buildInnerPriorityPointsForParent(currentParent,random);
+
+      phase2ParentStat.textContent=
+        `${(parentIndex+1).toLocaleString()} / ${parents.length.toLocaleString()}`;
+      phase2ParentTargetStat.textContent=currentTarget.toLocaleString();
+      phase2ParentAddedStat.textContent="0";
+
+      return true;
+    }
+
+    currentParent=null;
+    return false;
+  };
+
+  const finish=(reason)=>{
+    automaticInnerPhaseRunning=false;
+    startAutomaticInnerPhaseButton.disabled=false;
+    stopAutomaticInnerPhaseButton.disabled=true;
+    generateReconstructionButton.disabled=false;
+    clearReconstructionButton.disabled=false;
+    saveReconstructionPdfButton.disabled=reconstructionCircles.length===0;
+    saveSessionButton.disabled=reconstructionCircles.length===0;
+
+    phase2StateStat.textContent=reason;
+    phase2AddedStat.textContent=addedTotal.toLocaleString();
+    phase2InspectedStat.textContent=inspectedTotal.toLocaleString();
+    phase2Summary.textContent=
+      `${reconstructionCircles.filter(c=>c.phase===2).length.toLocaleString()} kör`;
+
+    setStatus(
+      `A 2. fázis megállt: ${reason}. `+
+      `Ebben a futásban ${addedTotal.toLocaleString()} új belső kör készült, `+
+      `${inspectedTotal.toLocaleString()} pont vizsgálatával.`
+    );
+
+    updateReconstructionStats();
+    draw();
+  };
+
+  if(!prepareParent()){
+    finish("nincs feldolgozható szülőkör");
+    return;
+  }
 
   const processChunk=()=>{
     const chunkStart=performance.now();
 
     while(
       automaticInnerPhaseRunning&&
-      added<requested&&
-      listIndex<priorityPoints.length&&
-      performance.now()-chunkStart<28
+      addedTotal<globalRequested&&
+      parentIndex<parents.length&&
+      performance.now()-chunkStart<16
     ){
-      const progress=requested>0?added/requested:1;
-
-      if(added-lastSortAt>=resortInterval){
-        const remaining=priorityPoints.slice(listIndex);
-        sortGlobalInnerPriorityList(remaining,progress);
-        priorityPoints.splice(listIndex,remaining.length,...remaining);
-        lastSortAt=added;
+      if(!currentParent){
+        if(!prepareParent())break;
       }
 
-      const point=priorityPoints[listIndex++];
-      inspected++;
-
-      if(point.rejected)continue;
-
-      const parent=findTopmostCircleContainingPoint(point.x,point.y);
-      const parentColorRadius=parent?getCircleColorRadius(parent):0;
-
-      if(!parent||parentColorRadius<2*limits.minRadius){
-        point.rejected=true;
+      /*
+        Egy szülőkör kész, ha:
+        - elérte a k*r vagy k*r² célszámot, VAGY
+        - elfogytak a benne vizsgálandó prioritási pontok.
+      */
+      if(
+        currentAdded>=currentTarget||
+        currentPointIndex>=currentPoints.length
+      ){
+        parentIndex++;
+        currentParent=null;
         continue;
       }
 
+      const point=currentPoints[currentPointIndex++];
+      inspectedTotal++;
+
+      /*
+        A pont csak az aktuális szülőkörön belüli kereséshez tartozik.
+        A tényleges új kör geometriáját továbbra is az
+        automaticInnerCandidate() számolja ki, tehát a belső érintési
+        és ütközési szabályok változatlanok.
+      */
+      const parentColorRadius=getCircleColorRadius(currentParent);
       const allowedMaximum=Math.min(
         limits.maxRadius,
         parentColorRadius*.49,
@@ -2759,25 +2917,23 @@ function generateAutomaticInnerCircles(){
       );
 
       if(allowedMaximum<limits.minRadius){
-        point.rejected=true;
+        parentIndex++;
+        currentParent=null;
         continue;
       }
 
       const candidate=automaticInnerCandidate(
-        parent,
+        currentParent,
         {
           x:point.x,
           y:point.y,
-          detail:point.dynamicPriority
+          detail:point.score
         },
         limits.minRadius,
         allowedMaximum
       );
 
-      if(!candidate){
-        point.rejected=true;
-        continue;
-      }
+      if(!candidate)continue;
 
       const safeColor=(
         candidate.color&&
@@ -2797,68 +2953,74 @@ function generateAutomaticInnerCircles(){
           g:safeColor.g,
           b:safeColor.b
         },
-        detail:Number.isFinite(point.dynamicPriority)
-          ?point.dynamicPriority
-          :0,
-        parent:candidate.parent,
+        detail:Number.isFinite(point.score)?point.score:0,
+        parent:currentParent,
+        parentId:currentParent.id??null,
         phase:2,
         prioritySource:{
-          combined:point.combined,
+          combined:point.detail,
           sobel:point.sobel,
-          edge:point.edge
+          edge:point.edge,
+          mode:"parent-first"
         }
       });
 
-      added++;
+      currentAdded++;
+      addedTotal++;
+
+      phase2ParentAddedStat.textContent=currentAdded.toLocaleString();
+      phase2AddedStat.textContent=addedTotal.toLocaleString();
+      phase2InspectedStat.textContent=inspectedTotal.toLocaleString();
     }
 
     updateReconstructionStats();
-    draw();
 
-    const progressPercent=requested
-      ?Math.round(100*added/requested)
-      :100;
+    if(currentParent){
+      phase2ParentStat.textContent=
+        `${(parentIndex+1).toLocaleString()} / ${parents.length.toLocaleString()}`;
+      phase2ParentTargetStat.textContent=currentTarget.toLocaleString();
+      phase2ParentAddedStat.textContent=currentAdded.toLocaleString();
+    }
+
+    phase2AddedStat.textContent=addedTotal.toLocaleString();
+    phase2InspectedStat.textContent=inspectedTotal.toLocaleString();
+    phase2Summary.textContent=
+      `${addedTotal.toLocaleString()} / ${globalRequested.toLocaleString()} új`;
 
     setStatus(
-      `Második fázis: ${added.toLocaleString()} / `+
-      `${requested.toLocaleString()} belső kör; `+
-      `${inspected.toLocaleString()} prioritási pont megvizsgálva; `+
-      `${progressPercent}%.`
+      `2. fázis: ${addedTotal.toLocaleString()} / `+
+      `${globalRequested.toLocaleString()} új belső kör; `+
+      `szülőkör ${(Math.min(parentIndex+1,parents.length)).toLocaleString()} / `+
+      `${parents.length.toLocaleString()}; `+
+      `${inspectedTotal.toLocaleString()} belső pont megvizsgálva.`
     );
 
-    if(
-      automaticInnerPhaseRunning&&
-      added<requested&&
-      listIndex<priorityPoints.length
-    ){
-      setTimeout(processChunk,0);
+    /*
+      Élő kirajzolás: a következő számítási adag előtt tényleges
+      böngésző-képkockát engedünk.
+    */
+    draw();
+
+    if(!automaticInnerPhaseRunning){
+      finish("felhasználói leállítás");
       return;
     }
 
-    automaticInnerPhaseRunning=false;
-    startAutomaticInnerPhaseButton.disabled=false;
-    stopAutomaticInnerPhaseButton.disabled=true;
-    generateReconstructionButton.disabled=false;
-    clearReconstructionButton.disabled=false;
-    saveReconstructionPdfButton.disabled=reconstructionCircles.length===0;
+    if(addedTotal>=globalRequested){
+      finish("a globális körszám-korlát elérve");
+      return;
+    }
 
-    const reason=added>=requested
-      ?"a kért belső körszám elérve"
-      :listIndex>=priorityPoints.length
-        ?"a globális prioritási lista elfogyott"
-        :"a felhasználó leállította";
+    if(parentIndex>=parents.length&&!currentParent){
+      finish("minden szülőkör feldolgozva");
+      return;
+    }
 
-    phase2Result.textContent=`${added.toLocaleString()} új belső kör készült; ${reason}.`;
-    phase2Summary.textContent=`${reconstructionCircles.filter(c=>c.phase===2).length.toLocaleString()} kör`;
-    setStatus(
-      `A második fázis befejeződött: `+
-      `${added.toLocaleString()} új belső kör; ${reason}.`
-    );
+    requestAnimationFrame(()=>setTimeout(processChunk,0));
   };
 
-  setTimeout(processChunk,0);
+  requestAnimationFrame(()=>setTimeout(processChunk,0));
 }
-
 function drawPartialReconstruction(){
   ctx.save();
 

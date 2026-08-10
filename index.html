@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Picture Analyzer Lab V0.24 – rendezett fázisok és munkamenet</title>
+<title>Picture Analyzer Lab V0.26 – rendezett fázisok és munkamenet</title>
 <style>
 :root{font-family:Arial,Helvetica,sans-serif;color-scheme:light}*{box-sizing:border-box}
 body{margin:0;background:#ececec;color:#222}header{background:#242424;color:#fff;padding:16px 20px}
@@ -380,7 +380,7 @@ button {
 </head>
 <body>
 <header>
-  <h1>Picture Analyzer Lab V0.24 – rendezett fázisok és munkamenet</h1>
+  <h1>Picture Analyzer Lab V0.26 – rendezett fázisok és munkamenet</h1>
   <p>Három külön fázis, folytatható munkamenet, állandó teljes körszám-kijelzés.</p>
 </header>
 <main>
@@ -741,6 +741,11 @@ button {
     <input id="viewZoom" type="range" min="100" max="800" step="5" value="100" disabled>
     <div class="metric-note">Egérgörgő: zoom. Jobb egérgomb + húzás: pásztázás.</div>
   </div>
+  <div class="row">
+    <input id="generateVisibleOnly" type="checkbox" checked>
+    <label for="generateVisibleOnly">Generálás csak a látható területen</label>
+  </div>
+  <div class="metric-note">Bekapcsolva a 0., 0.5, 1. és 2. fázis csak az aktuálisan látható képrészletre tesz vizsgálandó pontokat. A körök globális képkoordinátái változatlanok maradnak.</div>
   <button id="resetView" disabled>Alaphelyzet</button>
   <div id="status" class="status">Nincs betöltött kép.</div>
 
@@ -817,6 +822,7 @@ const viewer = document.querySelector(".viewer");
 const canvasWrap = document.querySelector(".canvas-wrap");
 const viewZoomInput = $("viewZoom");
 const viewZoomValue = $("viewZoomValue");
+const generateVisibleOnlyInput = $("generateVisibleOnly");
 const metricNote = $("metricNote");
 const canvas = $("canvas");
 const ctx = canvas.getContext("2d", {willReadFrequently:true});
@@ -1050,6 +1056,111 @@ function resetViewZoom(){
   applyViewZoomLayout();
   viewer.scrollLeft=0;
   viewer.scrollTop=0;
+}
+
+
+function getVisibleImageBounds(){
+  if(!sourceImage){
+    return{minX:0,minY:0,maxX:0,maxY:0,width:0,height:0};
+  }
+
+  if(!generateVisibleOnlyInput.checked){
+    return{
+      minX:0,
+      minY:0,
+      maxX:sourceImage.width,
+      maxY:sourceImage.height,
+      width:sourceImage.width,
+      height:sourceImage.height
+    };
+  }
+
+  const canvasRect=canvas.getBoundingClientRect();
+  const viewerRect=viewer.getBoundingClientRect();
+
+  /*
+    A viewer és a canvas képernyőbeli metszetét visszavetítjük
+    az eredeti kép teljes felbontású koordináta-rendszerére.
+  */
+  const left=Math.max(canvasRect.left,viewerRect.left);
+  const top=Math.max(canvasRect.top,viewerRect.top);
+  const right=Math.min(canvasRect.right,viewerRect.right);
+  const bottom=Math.min(canvasRect.bottom,viewerRect.bottom);
+
+  if(
+    right<=left||
+    bottom<=top||
+    canvasRect.width<=0||
+    canvasRect.height<=0
+  ){
+    return{
+      minX:0,
+      minY:0,
+      maxX:sourceImage.width,
+      maxY:sourceImage.height,
+      width:sourceImage.width,
+      height:sourceImage.height
+    };
+  }
+
+  const minX=Math.max(
+    0,
+    Math.min(
+      sourceImage.width,
+      (left-canvasRect.left)*sourceImage.width/canvasRect.width
+    )
+  );
+  const maxX=Math.max(
+    0,
+    Math.min(
+      sourceImage.width,
+      (right-canvasRect.left)*sourceImage.width/canvasRect.width
+    )
+  );
+  const minY=Math.max(
+    0,
+    Math.min(
+      sourceImage.height,
+      (top-canvasRect.top)*sourceImage.height/canvasRect.height
+    )
+  );
+  const maxY=Math.max(
+    0,
+    Math.min(
+      sourceImage.height,
+      (bottom-canvasRect.top)*sourceImage.height/canvasRect.height
+    )
+  );
+
+  return{
+    minX,
+    minY,
+    maxX,
+    maxY,
+    width:Math.max(0,maxX-minX),
+    height:Math.max(0,maxY-minY)
+  };
+}
+
+function pointInGenerationBounds(x,y,bounds=getVisibleImageBounds()){
+  return(
+    x>=bounds.minX&&
+    x<=bounds.maxX&&
+    y>=bounds.minY&&
+    y<=bounds.maxY
+  );
+}
+
+function generationBoundsForRadius(radius=0){
+  const bounds=getVisibleImageBounds();
+  const margin=Math.max(0,Number(radius)||0);
+
+  return{
+    minX:Math.max(margin,bounds.minX),
+    minY:Math.max(margin,bounds.minY),
+    maxX:Math.min(sourceImage.width-margin,bounds.maxX),
+    maxY:Math.min(sourceImage.height-margin,bounds.maxY)
+  };
 }
 
 function updatePhaseSummaries(){
@@ -1981,7 +2092,10 @@ function generateEdgeSkeleton(){
 
   const requested=Number(edgeSkeletonCountInput.value);
   const minCoherence=Number(edgeMinimumCoherenceInput.value)/100;
-  const candidates=buildSkeletonSeedCandidates();
+  const generationBounds=getVisibleImageBounds();
+  const candidates=buildSkeletonSeedCandidates().filter(
+    candidate=>pointInGenerationBounds(candidate.x,candidate.y,generationBounds)
+  );
   const visited=new Uint8Array(sourceImage.width*sourceImage.height);
 
   reconstructionCircles=[];
@@ -2062,6 +2176,7 @@ function generateEdgeSkeleton(){
       y=parent.y+dy/length*(parent.radius+radius);
     }
 
+    if(!pointInGenerationBounds(x,y,generationBounds))return null;
     if(!circleFits(x,y,radius,parent))return null;
 
     const circle={
@@ -2166,9 +2281,10 @@ function generateEdgeSkeleton(){
       const predictedY=point.y+tangent.y*advance;
 
       if(predictedX<1||predictedY<1||predictedX>=sourceImage.width-1||predictedY>=sourceImage.height-1)break;
+      if(!pointInGenerationBounds(predictedX,predictedY,generationBounds))break;
 
       const next=edgePointAt(predictedX,predictedY);
-      if(!next)break;
+      if(!next||!pointInGenerationBounds(next.x,next.y,generationBounds))break;
 
       const displacement=Math.hypot(next.x-point.x,next.y-point.y);
       if(displacement<1||displacement>advance*2.5)break;
@@ -2255,6 +2371,14 @@ function generateEdgeExpansion(){
 
   const requestedNewCircles=Number(edgeExpansionCircleCountInput.value);
   const width=sourceImage.width,height=sourceImage.height;
+  const generationBounds=generationBoundsForRadius(limits.minRadius);
+  if(
+    generationBounds.maxX<=generationBounds.minX||
+    generationBounds.maxY<=generationBounds.minY
+  ){
+    setStatus("A látható terület túl kicsi a beállított minimális körmérethez.");
+    return;
+  }
   const circles=reconstructionCircles.slice();
   const initialCircleCount=circles.length;
   const targetTotalCircleCount=initialCircleCount+requestedNewCircles;
@@ -2403,10 +2527,10 @@ function generateEdgeExpansion(){
 
     for(let i=0;i<sampleCount&&candidateTests<absoluteMaximumTests;i++){
       candidateTests++;
-      const x=limits.minRadius+
-        random()*Math.max(1,width-2*limits.minRadius);
-      const y=limits.minRadius+
-        random()*Math.max(1,height-2*limits.minRadius);
+      const x=generationBounds.minX+
+        random()*Math.max(1,generationBounds.maxX-generationBounds.minX);
+      const y=generationBounds.minY+
+        random()*Math.max(1,generationBounds.maxY-generationBounds.minY);
       const candidate=evaluateCandidate(x,y);
       if(candidate&&(!best||candidate.score>best.score))best=candidate;
     }
@@ -2425,8 +2549,8 @@ function generateEdgeExpansion(){
     const offsetY=(fallbackLevel*.61%1)*spacing;
     let best=null;
 
-    for(let y=limits.minRadius+offsetY;y<=height-limits.minRadius;y+=spacing){
-      for(let x=limits.minRadius+offsetX;x<=width-limits.minRadius;x+=spacing){
+    for(let y=generationBounds.minY+offsetY;y<=generationBounds.maxY;y+=spacing){
+      for(let x=generationBounds.minX+offsetX;x<=generationBounds.maxX;x+=spacing){
         candidateTests++;
         const candidate=evaluateCandidate(x,y);
         if(candidate&&(!best||candidate.score>best.score))best=candidate;
@@ -2572,6 +2696,14 @@ function generatePartialReconstruction(){
 
   const requestedNewCircles=Number(reconstructionCircleCountInput.value);
   const width=sourceImage.width,height=sourceImage.height;
+  const generationBounds=generationBoundsForRadius(limits.minRadius);
+  if(
+    generationBounds.maxX<=generationBounds.minX||
+    generationBounds.maxY<=generationBounds.minY
+  ){
+    setStatus("A látható terület túl kicsi a beállított minimális körmérethez.");
+    return;
+  }
   const circles=reconstructionCircles.slice();
   const initialCircleCount=circles.length;
   const targetTotalCircleCount=initialCircleCount+requestedNewCircles;
@@ -2704,10 +2836,10 @@ function generatePartialReconstruction(){
 
     for(let i=0;i<sampleCount&&candidateTests<absoluteMaximumTests;i++){
       candidateTests++;
-      const x=limits.minRadius+
-        random()*Math.max(1,width-2*limits.minRadius);
-      const y=limits.minRadius+
-        random()*Math.max(1,height-2*limits.minRadius);
+      const x=generationBounds.minX+
+        random()*Math.max(1,generationBounds.maxX-generationBounds.minX);
+      const y=generationBounds.minY+
+        random()*Math.max(1,generationBounds.maxY-generationBounds.minY);
       const candidate=evaluateCandidate(x,y);
       if(candidate&&(!best||candidate.score>best.score))best=candidate;
     }
@@ -3127,7 +3259,9 @@ function phase2ParameterSignature(scopeRoot=null){
     automaticInnerCircleCount:String(automaticInnerCircleCountInput.value),
     gridSize:String(gridSizeInput.value),
     scope:String(innerRefinementScopeInput.value),
-    scopeRootId:scopeRoot?Number(scopeRoot.id):null
+    scopeRootId:scopeRoot?Number(scopeRoot.id):null,
+    generateVisibleOnly:Boolean(generateVisibleOnlyInput.checked),
+    visibleBounds:getVisibleImageBounds()
   });
 }
 
@@ -3164,10 +3298,29 @@ function buildInnerPriorityPointsForParent(parent,random){
     Így nem keletkezik a korábbi globális listára jellemző
     nagy mennyiségű eleve értelmetlen próbapont.
   */
-  const minX=Math.max(0,Math.floor(parent.x-colorRadius));
-  const maxX=Math.min(sourceImage.width-1,Math.ceil(parent.x+colorRadius));
-  const minY=Math.max(0,Math.floor(parent.y-colorRadius));
-  const maxY=Math.min(sourceImage.height-1,Math.ceil(parent.y+colorRadius));
+  const generationBounds=getVisibleImageBounds();
+  const minX=Math.max(
+    0,
+    generationBounds.minX,
+    Math.floor(parent.x-colorRadius)
+  );
+  const maxX=Math.min(
+    sourceImage.width-1,
+    generationBounds.maxX,
+    Math.ceil(parent.x+colorRadius)
+  );
+  const minY=Math.max(
+    0,
+    generationBounds.minY,
+    Math.floor(parent.y-colorRadius)
+  );
+  const maxY=Math.min(
+    sourceImage.height-1,
+    generationBounds.maxY,
+    Math.ceil(parent.y+colorRadius)
+  );
+
+  if(maxX<=minX||maxY<=minY)return [];
 
   const spacing=Math.max(2,Math.min(gridSize,Math.max(3,colorRadius/8)));
   const points=[];
@@ -3179,6 +3332,7 @@ function buildInnerPriorityPointsForParent(parent,random){
       const px=x+jitterX;
       const py=y+jitterY;
 
+      if(!pointInGenerationBounds(px,py,generationBounds))continue;
       if(Math.hypot(px-parent.x,py-parent.y)>=colorRadius)continue;
 
       const detail=combinedDetailAtPixel(px,py);
@@ -3703,41 +3857,133 @@ function chooseWeightedPriorityPoint(points){
   return points[points.length-1]||null;
 }
 function buildChildPriorityCandidates(parent,minChild){
+  const limits=getPhysicalCircleLimits();
+  if(!limits||!parent)return[];
+
   const detailWeight=Number(childDetailWeightInput.value)/100;
   const parentColor=parent.color;
   const parentColorRadius=getCircleColorRadius(parent);
+
+  const maxChild=Math.min(
+    parentColorRadius*.49,
+    parentColorRadius*Number(childRadiusPercentInput.value)/100,
+    limits.maxRadius
+  );
+
+  if(maxChild<minChild)return[];
+
   const step=Math.max(2,Math.floor(parentColorRadius/18));
   const margin=Math.max(1,minChild*.35);
-  const raw=[];
+  const visibleBounds=getVisibleImageBounds();
+
+  const valid=[];
   let maximum=0;
 
-  for(let y=parent.y-parentColorRadius+margin;y<=parent.y+parentColorRadius-margin;y+=step){
-    for(let x=parent.x-parentColorRadius+margin;x<=parent.x+parentColorRadius-margin;x+=step){
-      if((x-parent.x)**2+(y-parent.y)**2>(parentColorRadius-margin)**2)continue;
+  const minX=Math.max(
+    parent.x-parentColorRadius+margin,
+    visibleBounds.minX
+  );
+  const maxX=Math.min(
+    parent.x+parentColorRadius-margin,
+    visibleBounds.maxX
+  );
+  const minY=Math.max(
+    parent.y-parentColorRadius+margin,
+    visibleBounds.minY
+  );
+  const maxY=Math.min(
+    parent.y+parentColorRadius-margin,
+    visibleBounds.maxY
+  );
+
+  if(maxX<minX||maxY<minY)return[];
+
+  for(let y=minY;y<=maxY;y+=step){
+    for(let x=minX;x<=maxX;x+=step){
+      if(!pointInGenerationBounds(x,y,visibleBounds))continue;
+      if(
+        (x-parent.x)**2+(y-parent.y)**2>
+        (parentColorRadius-margin)**2
+      )continue;
+
       const detail=combinedDetailAtPixel(x,y);
       const contrast=colorDistance(sourceColorAt(x,y),parentColor);
-      const priority=detailWeight*detail+(1-detailWeight)*contrast;
+      const priority=
+        detailWeight*detail+
+        (1-detailWeight)*contrast;
+
+      /*
+        A V0.25 hibája itt volt:
+        korábban a pont bekerült a prioritási listába anélkül,
+        hogy tudtuk volna, készíthető-e belőle tényleges utódkör.
+
+        Most ELŐBB kiszámoljuk a geometriai körjavaslatot.
+      */
+      const circle=automaticInnerCandidate(
+        parent,
+        {x,y,detail},
+        minChild,
+        maxChild
+      );
+
+      // Geometriailag használhatatlan pont nem kerülhet a listába.
+      if(!circle)continue;
+
+      // Látható-terület módban a tényleges körközéppont is maradjon bent.
+      if(
+        generateVisibleOnlyInput.checked&&
+        !pointInGenerationBounds(circle.x,circle.y,visibleBounds)
+      )continue;
+
       if(priority>maximum)maximum=priority;
-      raw.push({x,y,detail,contrast,priority});
+
+      valid.push({
+        x,
+        y,
+        detail,
+        contrast,
+        priority,
+        circle
+      });
     }
   }
 
-  if(!raw.length||maximum<=0)return [];
+  if(!valid.length||maximum<=0)return[];
+
+  /*
+    A küszöböt már csak az érvényes jelöltek között alkalmazzuk.
+    Így egy magas prioritású, de geometriailag lehetetlen pont
+    nem tudja kiszorítani a használható pontokat.
+  */
   const threshold=maximum*.60;
-  const filtered=raw
+  const filtered=valid
     .filter(point=>point.priority>=threshold)
     .sort((a,b)=>b.priority-a.priority)
     .slice(0,200);
 
   for(const point of filtered){
     point.normalizedPriority=point.priority/maximum;
-    point.weight=Math.pow(Math.max(.0001,point.normalizedPriority),2.2);
+    point.weight=Math.pow(
+      Math.max(.0001,point.normalizedPriority),
+      2.2
+    );
+
+    // A már kiszámolt kör megkapja a képi prioritás metaadatait is.
+    point.circle.detail=point.detail;
+    point.circle.contrast=point.contrast;
+    point.circle.score=point.priority;
+    point.circle.priorityPoint=point;
   }
+
   return filtered;
 }
 function suggestChildCircle(){
-  const parent=selectedReconstructionCircle;if(!parent)return;
-  const limits=getPhysicalCircleLimits();if(!limits)return;
+  const parent=selectedReconstructionCircle;
+  if(!parent)return;
+
+  const limits=getPhysicalCircleLimits();
+  if(!limits)return;
+
   const parentColorRadius=getCircleColorRadius(parent);
   const maxChild=Math.min(
     parentColorRadius*.49,
@@ -3751,62 +3997,59 @@ function suggestChildCircle(){
   selectedChildPriorityPoint=null;
 
   if(maxChild<minChild){
-    updateChildCircleStats();scheduleDraw();
-    setStatus("A kiválasztott kör túl kicsi a beállított legkisebb körmérethez.");
+    updateChildCircleStats();
+    scheduleDraw();
+    setStatus(
+      "A kiválasztott kör túl kicsi a beállított legkisebb körmérethez."
+    );
     return;
   }
 
-  childPriorityCandidates=buildChildPriorityCandidates(parent,minChild);
-  selectedChildPriorityPoint=chooseWeightedPriorityPoint(childPriorityCandidates);
+  /*
+    A lista most már kizárólag olyan prioritási pontokat tartalmaz,
+    amelyekhez tényleges, ütközésmentes belső érintő kör tartozik.
+  */
+  childPriorityCandidates=
+    buildChildPriorityCandidates(parent,minChild);
 
-  if(!selectedChildPriorityPoint){
-    updateChildCircleStats();scheduleDraw();
-    setStatus("A kiválasztott körben nem találtam megfelelő prioritási pontot.");
+  selectedChildPriorityPoint=
+    chooseWeightedPriorityPoint(childPriorityCandidates);
+
+  if(
+    !selectedChildPriorityPoint||
+    !selectedChildPriorityPoint.circle
+  ){
+    childCircleSuggestion=null;
+    acceptChildCircleButton.disabled=true;
+    clearChildSuggestionButton.disabled=true;
+    updateChildCircleStats();
+    scheduleDraw();
+
+    setStatus(
+      generateVisibleOnlyInput.checked
+        ?"A kijelölt kör látható részében a jelenlegi paraméterekkel nincs geometriailag elfogadható utódkör."
+        :"A kijelölt körben a jelenlegi paraméterekkel nincs geometriailag elfogadható utódkör."
+    );
     return;
   }
 
-  let dx=selectedChildPriorityPoint.x-parent.x;
-  let dy=selectedChildPriorityPoint.y-parent.y;
-  let length=Math.hypot(dx,dy);
-  if(length<1e-9){
-    const angle=Math.random()*Math.PI*2;
-    dx=Math.cos(angle);dy=Math.sin(angle);length=1;
-  }
-  dx/=length;dy/=length;
+  /*
+    Nem próbálunk a kiválasztás UTÁN újra geometriát keresni.
+    A jelölthöz tartozó kör már ellenőrzött és elfogadható.
+  */
+  childCircleSuggestion=selectedChildPriorityPoint.circle;
 
-  let best=null;
-  const radiusSteps=28;
-  for(let i=0;i<radiusSteps;i++){
-    const t=i/(radiusSteps-1);
-    const radius=maxChild-(maxChild-minChild)*t;
-    // Belső érintés a szülő színes belső köréhez.
-    const distance=parentColorRadius-radius;
-    const x=parent.x+dx*distance;
-    const y=parent.y+dy*distance;
-    const candidate={x,y,radius};
-    if(candidateOverlapsOtherCircles(candidate,parent))continue;
+  acceptChildCircleButton.disabled=false;
+  clearChildSuggestionButton.disabled=false;
 
-    const color=averageSourceColor(x,y,Math.max(1,radius));
-    best={
-      ...candidate,
-      color,
-      detail:selectedChildPriorityPoint.detail,
-      contrast:selectedChildPriorityPoint.contrast,
-      score:selectedChildPriorityPoint.priority,
-      parent,
-      priorityPoint:selectedChildPriorityPoint
-    };
-    break;
-  }
+  updateChildCircleStats();
+  scheduleDraw();
 
-  childCircleSuggestion=best;
-  acceptChildCircleButton.disabled=!best;
-  clearChildSuggestionButton.disabled=!best;
-  updateChildCircleStats();scheduleDraw();
-
-  setStatus(best
-    ?`A ${childPriorityCandidates.length} legerősebb jelölt közül súlyozott véletlennel kiválasztott prioritási pont alapján elkészült az utódkör-javaslat.`
-    :"A kiválasztott prioritási pont irányában nem találtam ütközésmentes utódkört.");
+  setStatus(
+    `A ${childPriorityCandidates.length} geometriailag érvényes jelölt `+
+    `közül elkészült az utódkör-javaslat. `+
+    `Sugár: ${childCircleSuggestion.radius.toFixed(2)} px.`
+  );
 }
 function acceptChildCircle(){
   if(!childCircleSuggestion)return;
@@ -3899,6 +4142,7 @@ function collectSessionSettings(){
     circleBorderBaseWidth:circleBorderBaseWidthInput.value,
     circleBorderExponent:circleBorderExponentInput.value,
     showOriginalUnderCircles:showOriginalUnderCirclesInput.checked,
+    generateVisibleOnly:generateVisibleOnlyInput.checked,
     childRadiusPercent:childRadiusPercentInput.value,
     childDetailWeight:childDetailWeightInput.value,
     innerTargetMode:innerTargetModeInput.value,
@@ -3980,7 +4224,7 @@ function saveSession(){
   const session={
     format:"PictureAnalyzerSession",
     formatVersion:1,
-    applicationVersion:"V0.24",
+    applicationVersion:"V0.26",
     savedAt:new Date().toISOString(),
     image:{
       fileName:fileNameBox.textContent,
@@ -4433,7 +4677,7 @@ function saveReconstructionPdf(){
     );
 
     const lines=[
-      "Picture Analyzer Lab V0.24 - retegezett vektoros PDF",
+      "Picture Analyzer Lab V0.26 - retegezett vektoros PDF",
       `Forrasfajl: ${fileNameBox.textContent}`,
       `Kategoria: ${category}`,
       `Vegleges meret: ${finalWidthCmInput.value} x ${finalHeightCmInput.value} cm`,
@@ -4473,7 +4717,7 @@ function saveReconstructionPdf(){
     );
 
     const infoId=addObject(
-      `<< /Title (${pdfEscape("Picture Analyzer Lab V0.24")}) `+
+      `<< /Title (${pdfEscape("Picture Analyzer Lab V0.26")}) `+
       `/Subject (${pdfEscape("Fazisonkent retegezett geometriai es szines korok")}) `+
       `/Creator (${pdfEscape("Picture Analyzer Lab")}) >>`
     );
